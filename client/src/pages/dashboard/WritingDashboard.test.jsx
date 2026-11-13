@@ -20,6 +20,7 @@ function mount() { return render(<MemoryRouter future={{ v7_startTransition: tru
 async function loaded() { await screen.findByRole("heading", { name: "Views across your writing" }); }
 beforeEach(() => { global.fetch = jest.fn().mockResolvedValue(response(snapshot())); });
 afterAll(() => { global.fetch = originalFetch; });
+afterEach(() => { jest.useRealTimers(); });
 
 test("anonymous readers only see the normal top-level ChatGPT sign-in flow", async () => {
   fetch.mockResolvedValue(response({ error: "Sign in" }, 401));
@@ -106,6 +107,82 @@ test("missing DEV.to key asks for it without locking the owner out", async () =>
   expect(await screen.findByRole("alert")).toHaveTextContent("Enter an API key from your existing DEV.to account");
   expect(screen.getByLabelText("DEV.to API key (if requested)")).toHaveFocus();
   expect(screen.getByRole("heading", { name: "Views across your writing" })).toBeInTheDocument();
+});
+
+test.each([
+  ["devto_invalid_key", 400, /API key is invalid or was not accepted by DEV.to/],
+  ["devto_account_mismatch", 400, /key belongs to a different DEV.to account/],
+  ["devto_connection_failed", 502, /Website could not connect to DEV.to\. This does not mean your API key is wrong/],
+  ["devto_blocked", 502, /DEV.to blocked the request/],
+  ["devto_rate_limited", 429, /DEV.to is limiting requests/],
+  ["devto_unavailable", 502, /DEV.to returned an error/],
+  ["devto_invalid_response", 502, /DEV.to returned data this website could not use/],
+  ["devto_no_matching_articles", 400, /No DEV.to articles matched this website/],
+  ["devto_import_conflict", 409, /newer snapshot is already saved/],
+  ["devto_storage_unavailable", 503, /Statistics storage is unavailable/],
+])("DEV.to failure %s shows its actual category without exposing upstream errors", async (code, status, expected) => {
+  mount(); await loaded();
+  const input = screen.getByLabelText("DEV.to API key (if requested)");
+  fireEvent.change(input, { target: { value: "test-key-that-must-be-cleared" } });
+  fetch.mockResolvedValueOnce(response({ error: "Raw upstream error must stay hidden", code }, status));
+  fireEvent.submit(screen.getByRole("form", { name: "Import DEV.to statistics" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent(expected);
+  expect(alert).not.toHaveTextContent("Raw upstream error");
+  expect(alert).not.toHaveTextContent("Check your API key and try again");
+  expect(input).toHaveValue("");
+  expect(screen.getByRole("heading", { name: "Views across your writing" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "This dashboard is private." })).not.toBeInTheDocument();
+});
+
+test.each([
+  [401, "Sign in to view your dashboard."],
+  [403, "This dashboard is private."],
+])("site authentication failure %s during import still clears private content", async (status, heading) => {
+  mount(); await loaded();
+  fetch.mockResolvedValueOnce(response({ error: "Website access denied" }, status));
+  fireEvent.submit(screen.getByRole("form", { name: "Import DEV.to statistics" }));
+  expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  expect(screen.queryByRole("form")).not.toBeInTheDocument();
+});
+
+test.each(["unexpected_error", "constructor", "__proto__"])("unknown import code %s remains unconfirmed and never repeats arbitrary server text", async code => {
+  mount(); await loaded();
+  fetch.mockResolvedValueOnce(response({ error: "Your key is definitely wrong: private-value", code }, 502));
+  fireEvent.submit(screen.getByRole("form", { name: "Import DEV.to statistics" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("The DEV.to import could not be confirmed");
+  expect(alert).not.toHaveTextContent("key is definitely wrong");
+  expect(alert).not.toHaveTextContent("private-value");
+});
+
+test("a browser network failure is distinguished from a rejected DEV.to API key", async () => {
+  mount(); await loaded();
+  fetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  fireEvent.submit(screen.getByRole("form", { name: "Import DEV.to statistics" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("import request could not reach the website");
+  expect(screen.getByRole("alert")).not.toHaveTextContent("API key is invalid");
+});
+
+test("a timed-out import advises checking the dashboard before retrying", async () => {
+  mount(); await loaded();
+  jest.useFakeTimers();
+  fetch.mockImplementationOnce((_, options) => new Promise((resolve, reject) => {
+    options.signal.addEventListener("abort", () => reject(Object.assign(new Error("Aborted"), { name: "AbortError" })));
+  }));
+  fireEvent.change(screen.getByLabelText("DEV.to API key (if requested)"), { target: { value: "test-key" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Import DEV.to statistics" }));
+  await act(async () => jest.advanceTimersByTime(40000));
+  expect(screen.getByRole("alert")).toHaveTextContent("import request timed out, so completion could not be confirmed");
+  expect(screen.getByRole("alert")).toHaveTextContent("Refresh the dashboard to check for an update");
+  expect(screen.getByLabelText("DEV.to API key (if requested)")).toHaveValue("");
+});
+
+test("key instructions link directly to DEV.to settings and distinguish value from label", async () => {
+  mount(); await loaded();
+  expect(screen.getByRole("link", { name: "DEV.to API key settings ↗" })).toHaveAttribute("href", "https://dev.to/settings/extensions");
+  expect(screen.getByText(/Copy the generated key value, not its label, and paste it here/)).toHaveTextContent("dessygil");
 });
 
 test("manual cumulative snapshots send the selected article, platform, and date exactly once", async () => {

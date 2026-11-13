@@ -81,6 +81,30 @@ class DashboardError extends Error {
   constructor(message, status, code) { super(message); this.status = status; this.code = code; }
 }
 
+function devtoImportError(error) {
+  const messages = {
+    devto_key_required: "Enter an API key from your existing DEV.to account, dessygil, to import its private view counts. Copy the generated key value, not its label.",
+    devto_invalid_key: "This API key is invalid or was not accepted by DEV.to. Copy the generated key value from the dessygil account in DEV.to settings, then try again.",
+    devto_account_mismatch: "This key belongs to a different DEV.to account. Use an API key from dessygil to import this website’s articles.",
+    devto_connection_failed: "Website could not connect to DEV.to. This does not mean your API key is wrong. The import was not confirmed; try again later.",
+    devto_blocked: "Website could not connect to DEV.to. This does not mean your API key is wrong. DEV.to blocked the request; the import was not confirmed.",
+    devto_rate_limited: "DEV.to is limiting requests. The import was not confirmed. Wait a few minutes, then try again.",
+    devto_unavailable: "DEV.to returned an error, so the import could not be confirmed. Try again later.",
+    devto_invalid_response: "DEV.to returned data this website could not use. The import was not confirmed. Try again later.",
+    devto_no_matching_articles: "No DEV.to articles matched this website’s writing archive. Check that the archive’s source URLs refer to published articles on dessygil’s DEV.to account.",
+    devto_import_conflict: "A newer snapshot is already saved for an article. Refresh the dashboard before importing again.",
+    devto_storage_unavailable: "Statistics storage is unavailable, so the import could not be confirmed. Refresh the dashboard and try again later.",
+    request_timeout: "The import request timed out, so completion could not be confirmed. Refresh the dashboard to check for an update before trying again.",
+  };
+  let text = Object.prototype.hasOwnProperty.call(messages, error.code) ? messages[error.code] : undefined;
+  if (!text && error instanceof TypeError) text = "The import request could not reach the website. Completion could not be confirmed. Check your connection and refresh the dashboard before trying again.";
+  return {
+    type: "error",
+    needsKey: ["devto_key_required", "devto_invalid_key", "devto_account_mismatch"].includes(error.code),
+    text: `${text || "The DEV.to import could not be confirmed. Refresh the dashboard to check for an update before trying again."} The key has been cleared.`,
+  };
+}
+
 function ExternalViews({ source, platform }) {
   if (!source || !validCount(source.views)) return <span className="dashboard-not-added">Not added</span>;
   const url = safeUrl(source.url);
@@ -141,7 +165,7 @@ export default function WritingDashboard() {
       if (!body || typeof body !== "object") throw new Error("The server returned an unexpected response.");
       return body;
     } catch (error) {
-      if (error.name === "AbortError") throw new Error("The request timed out. Please try again.");
+      if (error.name === "AbortError") throw new DashboardError("The request timed out. Please try again.", undefined, "request_timeout");
       throw error;
     } finally { clearTimeout(timeout); controllers.current.delete(controller); }
   }, []);
@@ -194,8 +218,7 @@ export default function WritingDashboard() {
       await load();
     } catch (error) {
       if (mounted.current && !handleAccessError(error)) {
-        const needsKey = error.code === "devto_key_required";
-        setDevtoStatus({ type: "error", needsKey, text: needsKey ? "Enter an API key from your existing DEV.to account to import its private view counts." : "DEV.to import could not be confirmed. Check your API key and try again. The key has been cleared." });
+        setDevtoStatus(devtoImportError(error));
       }
     } finally { busy.current = false; if (mounted.current) { setApiKey(""); setMutation(null); } }
   }
@@ -259,7 +282,7 @@ export default function WritingDashboard() {
         <div className="dashboard-table-scroll" role="region" aria-label="Per-article writing statistics" tabIndex="0"><table className="dashboard-table dashboard-articles-table"><caption>Recorded website views and latest reported cumulative views from external sources. Total means available reported views, not unique readers.</caption><thead><tr><th scope="col">Article</th><th scope="col">Website</th><th scope="col">DEV.to</th><th scope="col">Substack</th><th scope="col">Medium</th><th scope="col">Reported total</th><th scope="col">Website likes</th></tr></thead><tbody>{shownArticles.map(article => <tr key={article.slug}><th scope="row"><Link to={`/writing/${article.slug}`}>{article.title}</Link><small className="dashboard-article-slug">{article.slug}</small></th><td><strong>{count(article.websiteViews)}</strong></td>{PLATFORMS.map(source => <td key={source}><ExternalViews source={article[source]} platform={source} /></td>)}<td><strong>{count(article.totalViews)}</strong></td><td>{count(article.likes)}</td></tr>)}</tbody></table></div>
         {!shownArticles.length && <p className="dashboard-note">{data.articles.length ? "No articles match this search." : "No articles are available yet."}</p>}
       </section>
-      <section className="dashboard-panel" aria-labelledby="devto-import-heading"><p className="eyebrow">OWNER TOOLS</p><h2 id="devto-import-heading">Import DEV.to views</h2><p>Use an API key from your existing DEV.to account. Paste it here, never in chat. It is used for this import only and cleared when submitted; this page does not save it.</p><form onSubmit={importDevto} className="dashboard-import-form" aria-label="Import DEV.to statistics"><label htmlFor="dashboard-devto-key">DEV.to API key (if requested)</label><input ref={apiInput} id="dashboard-devto-key" type="password" value={apiKey} onChange={event => setApiKey(event.target.value)} autoComplete="off" spellCheck="false" disabled={!!mutation} aria-describedby="dashboard-devto-key-note" /><p className="dashboard-note" id="dashboard-devto-key-note">If a key is already configured for the site, you can leave this blank. Importing replaces the previous DEV.to snapshot for each matched article.</p><button className="primary-link" type="submit" disabled={!!mutation || loading}>{mutation === "devto" ? "Importing…" : "Import DEV.to views"}</button></form>{devtoStatus && <p className={`dashboard-message ${devtoStatus.type === "error" ? "is-error" : "is-success"}`} role={devtoStatus.type === "error" ? "alert" : "status"}>{devtoStatus.text}</p>}</section>
+      <section className="dashboard-panel" aria-labelledby="devto-import-heading"><p className="eyebrow">OWNER TOOLS</p><h2 id="devto-import-heading">Import DEV.to views</h2><p>Open <a className="text-link" href="https://dev.to/settings/extensions" target="_blank" rel="noopener noreferrer">DEV.to API key settings ↗</a> while signed in as <strong>dessygil</strong>. Copy the generated key value, not its label, and paste it here, never in chat. It is used for this import only and cleared when submitted; this page does not save it.</p><form onSubmit={importDevto} className="dashboard-import-form" aria-label="Import DEV.to statistics"><label htmlFor="dashboard-devto-key">DEV.to API key (if requested)</label><input ref={apiInput} id="dashboard-devto-key" type="password" value={apiKey} onChange={event => setApiKey(event.target.value)} autoComplete="off" spellCheck="false" disabled={!!mutation} aria-describedby="dashboard-devto-key-note" /><p className="dashboard-note" id="dashboard-devto-key-note">If a key is already configured for the site, you can leave this blank. Importing replaces the previous DEV.to snapshot for each matched article.</p><button className="primary-link" type="submit" disabled={!!mutation || loading}>{mutation === "devto" ? "Importing…" : "Import DEV.to views"}</button></form>{devtoStatus && <p className={`dashboard-message ${devtoStatus.type === "error" ? "is-error" : "is-success"}`} role={devtoStatus.type === "error" ? "alert" : "status"}>{devtoStatus.text}</p>}</section>
       <section className="dashboard-panel" aria-labelledby="manual-stats-heading"><p className="eyebrow">OWNER TOOLS</p><h2 id="manual-stats-heading">Add platform view counts</h2><p>Copy the cumulative view count shown by Substack or Medium and record the date. Saving a new snapshot replaces the previous count for that article and platform; it never adds both snapshots together.</p>
         <form className="dashboard-manual-form" onSubmit={saveManual} aria-label="Save platform view counts" noValidate><fieldset disabled={!!mutation}><legend className="dashboard-sr-only">Platform snapshot</legend><div className="dashboard-form-grid"><label>Platform<select value={platform} onChange={event => setPlatform(event.target.value)}><option value="substack">Substack</option><option value="medium">Medium</option></select></label><label>Counts as of<input type="date" value={asOf} onChange={event => setAsOf(event.target.value)} required /></label><label>Entry method<select value={manualMode} onChange={event => { setManualMode(event.target.value); setManualStatus(null); }}><option value="single">One article</option><option value="csv">CSV file</option></select></label></div>
           {manualMode === "single" ? <><label>Article<select value={slug} onChange={event => setSlug(event.target.value)} required><option value="">Choose an article</option>{data.articles.map(article => <option value={article.slug} key={article.slug}>{article.title}</option>)}</select></label><label>Article URL on {PLATFORM_LABELS[platform]}<input type="url" value={sourceUrl} onChange={event => setSourceUrl(event.target.value)} placeholder={platform === "substack" ? "https://publication.substack.com/p/article" : "https://medium.com/@author/article"} required /></label><label>Cumulative views<input type="number" min="0" step="1" inputMode="numeric" value={views} onChange={event => setViews(event.target.value)} required /></label></> : <><label>Statistics CSV<input type="file" accept=".csv,text/csv" onChange={event => { setCsvFile(event.target.files?.[0] || null); setManualStatus(null); }} aria-describedby="dashboard-csv-help" /></label><div className="dashboard-csv-help" id="dashboard-csv-help"><p>Use the header <code>slug,url,views</code> and one row per article. Copy the article slug from the table above. All rows use the selected platform and “Counts as of” date. Quoted fields and commas are supported; use at most 500 rows and 256 KB.</p><pre>slug,url,views{"\n"}your-article-slug,https://publication.substack.com/p/article,123</pre><p>The example is a format guide, not imported data.</p></div></>}

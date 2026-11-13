@@ -142,15 +142,40 @@ test('one external story cannot inflate totals through duplicate local mappings'
 test('DEV.to verifies owner and paginates before atomically saving only matched counters, never the key', async t => {
   t.mock.method(Date, 'now', () => now); const bucket = seeded(), calls = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
+    // Workerd rejects redirect:error before network I/O; Node fetch accepts it.
+    if (!['follow', 'manual'].includes(options.redirect)) throw new TypeError('Invalid redirect value');
     calls.push({ url, options });
     return response(url.endsWith('/users/me') ? { username: 'dessygil' } : url.endsWith('page=1') ? largePage() : [remoteArticle(second)]);
   });
   const result = await handleWritingDashboard(request(devEndpoint, { apiKey: secret }), env(bucket)), value = await result.json();
   assert.equal(result.status, 200); assert.equal(value.imported, 2); assert.equal(calls.length, 3);
   assert.deepEqual(calls.map(call => call.url), ['https://dev.to/api/users/me', 'https://dev.to/api/articles/me/published?per_page=100&page=1', 'https://dev.to/api/articles/me/published?per_page=100&page=2']);
-  assert.ok(calls.every(({ options }) => options.redirect === 'error' && options.headers['api-key'] === secret && options.signal instanceof AbortSignal));
+  assert.ok(calls.every(({ options }) => options.redirect === 'manual' && options.headers['api-key'] === secret && options.signal instanceof AbortSignal));
+  assert.ok(calls.every(({ options }) => options.headers['User-Agent'].startsWith('DesPersonalSite/')));
   assert.equal(writes(bucket).length, 1); assert.equal(bucket.value(snapshotKey).platforms.devto[first.slug].views, 42);
   assert.equal(JSON.stringify(value).includes(secret), false); assert.equal(JSON.stringify([...bucket.objects]).includes(secret), false);
+});
+
+test('DEV.to redirects never receive credentials and upstream failures preserve useful error codes', async t => {
+  for (const [status, expectedStatus, code] of [[301, 502, 'devto_unavailable'], [302, 502, 'devto_unavailable'], [307, 502, 'devto_unavailable'], [308, 502, 'devto_unavailable'], [401, 400, 'devto_invalid_key'], [403, 502, 'devto_blocked'], [429, 429, 'devto_rate_limited'], [503, 502, 'devto_unavailable']]) {
+    const bucket = seeded(); let calls = 0;
+    t.mock.method(globalThis, 'fetch', async (url, options) => {
+      calls += 1; assert.equal(url, 'https://dev.to/api/users/me'); assert.equal(options.redirect, 'manual');
+      return new Response(`Untrusted upstream body ${secret}`, { status, headers: { Location: 'https://other.example/steal-key' } });
+    });
+    const result = await handleWritingDashboard(request(devEndpoint, { apiKey: secret }), env(bucket));
+    const value = await result.json(); assert.equal(result.status, expectedStatus); assert.equal(value.code, code);
+    assert.equal(calls, 1); assert.equal(writes(bucket).length, 0); assert.equal(JSON.stringify(value).includes(secret), false);
+  }
+});
+
+test('DEV.to transport and unreadable responses are distinguished from an invalid key', async t => {
+  for (const [kind, code] of [['network', 'devto_connection_failed'], ['html', 'devto_invalid_response']]) {
+    const bucket = seeded();
+    t.mock.method(globalThis, 'fetch', async () => { if (kind === 'network') throw new TypeError('fetch failed'); return new Response('<html>Upstream unavailable</html>'); });
+    const result = await handleWritingDashboard(request(devEndpoint, { apiKey: secret }), env(bucket));
+    const value = await result.json(); assert.equal(result.status, 502); assert.equal(value.code, code); assert.equal(writes(bucket).length, 0);
+  }
 });
 
 test('wrong DEV.to account and invalid later pages leave saved snapshots intact', async t => {

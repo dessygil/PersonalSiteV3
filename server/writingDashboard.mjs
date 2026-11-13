@@ -214,44 +214,51 @@ async function importDevto(input, env, articles) {
   if (!object(input) || !onlyKeys(input, ['apiKey'])) throw new Failure(400, 'Supply only an optional DEV.to API key.');
   const key = input.apiKey === undefined ? env.DEVTO_ANALYTICS_API_KEY : input.apiKey;
   if (key === undefined || key === '') throw new Failure(409, 'Enter your DEV.to API key to refresh private view counts, or configure it securely on the server.', 'devto_key_required');
-  if (typeof key !== 'string' || !/^[\x21-\x7e]{1,256}$/.test(key)) throw new Failure(400, 'Use a valid DEV.to API key.');
+  if (typeof key !== 'string' || !/^[\x21-\x7e]{1,256}$/.test(key)) throw new Failure(400, 'Use a valid DEV.to API key.', 'devto_invalid_key');
   const signal = AbortSignal.timeout(25_000); let bytesRead = 0;
   async function read(path) {
     let response;
-    try { response = await fetch(`https://dev.to${path}`, { headers: { 'api-key': key, Accept: 'application/vnd.forem.api-v1+json' }, redirect: 'error', signal }); }
-    catch { throw new Failure(502, 'DEV.to statistics could not be reached. The saved counts are unchanged.'); }
+    // Workers supports follow/manual, not redirect:error. Manual prevents the
+    // credential from being forwarded to a redirect destination; reject below.
+    try { response = await fetch(`https://dev.to${path}`, { headers: { 'api-key': key, Accept: 'application/vnd.forem.api-v1+json', 'User-Agent': 'DesPersonalSite/1.0 (+https://desmondgilmour.com)' }, redirect: 'manual', signal }); }
+    catch { throw new Failure(502, 'The website could not connect to DEV.to. This does not mean your API key is wrong. Saved counts are unchanged.', 'devto_connection_failed'); }
     if (!response.ok || response.redirected) {
       await response.body?.cancel();
-      if (response.status === 401 || response.status === 403) throw new Failure(400, 'DEV.to did not accept this API key.');
-      throw new Failure(502, 'DEV.to statistics are temporarily unavailable. The saved counts are unchanged.');
+      if (response.status === 401) throw new Failure(400, 'DEV.to did not accept this API key. Copy the key value from DEV.to Settings → Extensions.', 'devto_invalid_key');
+      if (response.status === 403) throw new Failure(502, 'DEV.to blocked the website’s request. This does not establish that your API key is wrong.', 'devto_blocked');
+      if (response.status === 429) throw new Failure(429, 'DEV.to is limiting requests. Wait a few minutes before importing again.', 'devto_rate_limited');
+      throw new Failure(502, 'DEV.to statistics are temporarily unavailable. The saved counts are unchanged.', 'devto_unavailable');
     }
-    const value = await boundedJson(response, 5 * 1024 * 1024, 502);
+    let value;
+    try { value = await boundedJson(response, 5 * 1024 * 1024, 502); }
+    catch { throw new Failure(502, 'DEV.to returned an unreadable statistics response. Saved counts are unchanged.', 'devto_invalid_response'); }
     bytesRead += new TextEncoder().encode(JSON.stringify(value)).length;
-    if (bytesRead > 20 * 1024 * 1024) throw new Failure(502, 'DEV.to statistics exceed the import limit.');
+    if (bytesRead > 20 * 1024 * 1024) throw new Failure(502, 'DEV.to statistics exceed the import limit.', 'devto_invalid_response');
     return value;
   }
   const user = await read('/api/users/me');
-  if (!object(user) || user.username !== 'dessygil') throw new Failure(400, 'Use the DEV.to API key belonging to dessygil.', 'devto_account_mismatch');
+  if (!object(user) || typeof user.username !== 'string') throw new Failure(502, 'DEV.to returned an invalid account response.', 'devto_invalid_response');
+  if (user.username !== 'dessygil') throw new Failure(400, 'Use the DEV.to API key belonging to dessygil.', 'devto_account_mismatch');
   const known = new Map(articles.map(article => [article.slug, article])), seen = new Set(), entries = [];
   const asOf = new Date(Date.now()).toISOString();
   for (let page = 1; page <= 11; page += 1) {
     const batch = await read(`/api/articles/me/published?per_page=100&page=${page}`);
-    if (!Array.isArray(batch) || batch.length > 100) throw new Failure(502, 'DEV.to returned invalid article statistics.');
+    if (!Array.isArray(batch) || batch.length > 100) throw new Failure(502, 'DEV.to returned invalid article statistics.', 'devto_invalid_response');
     for (const item of batch) {
-      if (!object(item) || !Number.isSafeInteger(item.id) || item.id <= 0 || !validSlug(item.slug) || seen.has(item.id) || item.user?.username !== 'dessygil' || !count(item.page_views_count)) throw new Failure(502, 'DEV.to returned invalid article statistics.');
-      seen.add(item.id); if (seen.size > MAX_ARTICLES) throw new Failure(502, 'DEV.to statistics exceed the article limit.');
+      if (!object(item) || !Number.isSafeInteger(item.id) || item.id <= 0 || !validSlug(item.slug) || seen.has(item.id) || item.user?.username !== 'dessygil' || !count(item.page_views_count)) throw new Failure(502, 'DEV.to returned invalid article statistics.', 'devto_invalid_response');
+      seen.add(item.id); if (seen.size > MAX_ARTICLES) throw new Failure(502, 'DEV.to statistics exceed the article limit.', 'devto_invalid_response');
       const url = sourceUrl('devto', item.url, item.slug), article = known.get(item.slug);
       if (article) {
-        if (article.id !== item.id || entries.some(entry => entry.slug === item.slug)) throw new Failure(502, 'DEV.to article identities did not match the writing archive.');
+        if (article.id !== item.id || entries.some(entry => entry.slug === item.slug)) throw new Failure(502, 'DEV.to article identities did not match the writing archive.', 'devto_invalid_response');
         entries.push({ slug: item.slug, views: item.page_views_count, url, asOf });
       }
     }
     if (batch.length < 100) {
-      if (!entries.length) throw new Failure(409, 'No matching published articles were found. Refresh the writing archive first.');
+      if (!entries.length) throw new Failure(409, 'No matching published articles were found. Refresh the writing archive first.', 'devto_no_matching_articles');
       return { platform: 'devto', asOf, entries };
     }
   }
-  throw new Failure(502, 'DEV.to pagination did not finish. The saved counts are unchanged.');
+  throw new Failure(502, 'DEV.to pagination did not finish. The saved counts are unchanged.', 'devto_invalid_response');
 }
 
 /** Private dashboard endpoints only. Sites must strip client identity headers and inject its verified identity. */
@@ -269,6 +276,8 @@ export async function handleWritingDashboard(request, env) {
     return json(await mergeImport(bucket, imported));
   } catch (error) {
     // Do not log or reflect request contents, upstream errors, credentials, or storage details.
-    return json({ error: error instanceof Failure ? error.message : 'Writing statistics are temporarily unavailable.', ...(error instanceof Failure && error.code ? { code: error.code } : {}) }, error instanceof Failure ? error.status : 503);
+    const status = error instanceof Failure ? error.status : 503;
+    const code = error instanceof Failure && error.code ? error.code : path === '/api/private/devto-stats' ? (status === 503 ? 'devto_storage_unavailable' : status === 409 ? 'devto_import_conflict' : null) : null;
+    return json({ error: error instanceof Failure ? error.message : 'Writing statistics are temporarily unavailable.', ...(code ? { code } : {}) }, status);
   }
 }

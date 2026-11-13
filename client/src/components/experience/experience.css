@@ -1,0 +1,128 @@
+
+.experience {
+  margin-top: 30vh;
+  margin-bottom: 30vh;
+}
+
+.company-name {
+  font-size: 22px !important;
+  margin-bottom: 20px !important;
+}
+
+.company-link {
+  position: relative;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--standard-color-dark);
+}
+
+.company-link::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 4px;
+  border-radius: 4px;
+  background-color: #18272F;
+  bottom: 0;
+  left: 0;
+  transform-origin: right;
+  transform: scaleX(0);
+  transition: transform .3s ease-in-out;
+}
+
+.company-link:hover::before {
+  transform-origin: left;
+  transform: scaleX(1);
+}
+
+.position-container {
+  margin-bottom: 30px;
+}
+
+.title {
+  font-size: 18px !important;
+  font-weight: 500 !important;
+  margin-bottom: 5px !important;
+}
+
+.date {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.duties-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.duties {
+  margin-bottom: 10px;
+  position: relative;
+  padding-left: 30px;
+  max-width: 600px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.duties::before {
+  content: "▹";
+  position: absolute;
+  left: 0;
+  color: var(--standard-color-dark);
+}
+
+.box-content {
+  min-height: 400px;
+}
+
+@media (max-width: 768px) {
+  .MuiTabs-root {
+    min-width: 120px !important;
+  }
+
+  .MuiTab-root {
+    min-height: 48px !important;
+    padding: 6px 12px !important;
+    font-size: 14px !important;
+    line-height: 1.2 !important;
+    min-width: 120px !important;
+    word-break: break-word !important;
+  }
+
+  .company-name {
+    font-size: 16px !important;
+    word-break: break-word;
+    line-height: 1.3;
+    padding-right: 10px;
+    margin-bottom: 8px;
+  }
+
+  .company-link {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: break-word;
+  }
+
+  .title {
+    font-size: 14px !important;
+    margin-top: 10px !important;
+    padding-right: 10px;
+  }
+
+  .date {
+    font-size: 13px;
+  }
+
+  .duties {
+    font-size: 14px;
+    padding-left: 25px;
+    margin-bottom: 15px;
+  }
+
+  .position-container {
+    margin-bottom: 25px;
+    padding-right: 10px;
+  }
+}

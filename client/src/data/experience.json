@@ -1,0 +1,119 @@
+[
+  {
+    "name": "Nicoya",
+    "url": "https://nicoyalife.com/",
+    "field": "Scientific instrumentation · Remote",
+    "positions": [
+      {
+        "title": "Account Executive",
+        "dates": "Nov 2025 – Present",
+        "current": true,
+        "summary": "Own the full commercial portfolio for the Central U.S. across pharma, biotech, and academic R&D. Manage technical sales from scientific discovery and workflow evaluation through funding, procurement, and close.",
+        "bullets": [
+          "Achieved 111% of FY26 Q3, 115% of FY26 Q4, and 228% of FY27 Q1 targets.",
+          "Grew territory pipeline 10×, from $500K to $5M+.",
+          "Manage $400K+ opportunities and sales cycles extending beyond nine months across SPR, DSF, CD, HDX-MS, and stopped-flow.",
+          "First AE to close a cross-platform CD and SPR instrument sale following Nicoya’s acquisition of Applied Photophysics."
+        ]
+      },
+      {
+        "title": "Junior Account Executive",
+        "dates": "Jun 2025 – Nov 2025",
+        "summary": "Owned commercial growth for the OpenSPR portfolio across North America, working with academic, biotech, and pharmaceutical researchers.",
+        "bullets": [
+          "Rebuilt the OpenSPR pipeline to $1.465M in qualified opportunities.",
+          "Achieved 156% of the FY26 Q2 on-ramp target ($156K against $100K).",
+          "Created $3.4M in cross-sell pipeline through adjacent opportunities and collaboration with other AEs."
+        ]
+      },
+      {
+        "title": "SDR Team Lead",
+        "dates": "Jun 2024 – Jun 2025",
+        "summary": "Led day-to-day SDR operations and outbound territory development across New England.",
+        "bullets": [
+          "Generated $6.3M in self-sourced pipeline and $1.4M in influenced revenue.",
+          "Exceeded 125% of quota on instrument warranty sales.",
+          "Hired and mentored four SDRs and developed onboarding and prospecting playbooks.",
+          "Automated conference lead capture and enrichment in JavaScript, saving approximately 10 hours per event."
+        ]
+      },
+      {
+        "title": "Senior Sales Development Representative",
+        "dates": "Jun 2023 – Jun 2024",
+        "summary": "Developed outbound opportunities for Nicoya’s SPR portfolio across pharma, biotech, and academic research in North America and EMEA.",
+        "bullets": [
+          "Ranked #1 at 113.6% of meeting quota; sourced $1.1M+ in influenced revenue and secured 40+ prospect meetings.",
+          "Exceeded lead-generation targets by 50%+ at North American and EMEA industry conferences."
+        ]
+      }
+    ]
+  },
+  {
+    "name": "PatSnap",
+    "url": "https://www.patsnap.com/",
+    "field": "Innovation intelligence · Remote",
+    "positions": [
+      {
+        "title": "Sales Development Representative",
+        "dates": "Dec 2021 – Jun 2023",
+        "summary": "Built new business for an innovation intelligence platform using outbound outreach, Sales Navigator, Outreach, and ZoomInfo.",
+        "bullets": [
+          "Ranked third in North American ACV in Q2 and Q3 2022, and first in QSLs in Q3 2022.",
+          "Consistently maintained the highest monthly activity.",
+          "Co-hosted a company-wide Pride event."
+        ]
+      }
+    ]
+  },
+  {
+    "name": "I-MED Pharma",
+    "url": "https://imedpharma.com/",
+    "field": "Eye care · Southwestern Ontario",
+    "positions": [
+      {
+        "title": "Outbound Sales Representative",
+        "dates": "Jun 2021 – Dec 2021",
+        "summary": "Worked with optometry businesses on dry-eye diagnosis and management solutions.",
+        "bullets": [
+          "Achieved 103% of quota during a challenging Q3 period.",
+          "Acquired approximately five new optometry businesses through social media in Q3.",
+          "Managed a portfolio of 177 accounts across Southwestern Ontario."
+        ]
+      }
+    ]
+  },
+  {
+    "name": "University of Guelph",
+    "url": "https://www.uoguelph.ca/",
+    "field": "Research, teaching & student support",
+    "positions": [
+      {
+        "title": "NSERC Funded Research Assistant",
+        "dates": "May 2019 – Sep 2019",
+        "summary": "Worked in the Auzanneau group on synthetic methods for tumor-associated carbohydrate antigens.",
+        "bullets": [
+          "Synthesized and characterized a disaccharide acceptor (Lewis Y).",
+          "Explored synthetic pathways and presented research at the CEPS undergraduate poster session."
+        ]
+      },
+      {
+        "title": "Teaching Assistant",
+        "dates": "Jan 2019 – Sep 2019",
+        "summary": "Supported first-year general chemistry and second-year organic chemistry teaching.",
+        "bullets": [
+          "Received a teaching-assistant rating of 4.8/5.0.",
+          "Supported the education and laboratory safety of more than 60 students per semester."
+        ]
+      },
+      {
+        "title": "Residence Assistant — Duty Staff",
+        "dates": "Sep 2018 – Apr 2019",
+        "summary": "Supported student safety and community life in Maritime Hall, South Residence.",
+        "bullets": [
+          "Helped maintain a safe environment for more than 300 students.",
+          "De-escalated difficult situations and helped first-year students feel comfortable speaking up."
+        ]
+      }
+    ]
+  }
+]

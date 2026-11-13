@@ -1,0 +1,31 @@
+# DEV.to writing updates
+
+The Site stores the full writing archive in R2. A scheduled cloud task fetches public posts from https://dev.to/dessygil and sends validated updates to this Site through its authenticated writer endpoint. New posts and edits appear without a build or deployment. Previously imported posts are retained. Current images are bundled; new images use their public DEV.to URLs.
+
+The existing schedule remains daily at **9:00 AM America/Toronto**, including daylight-saving changes. This source update does not create or replace that schedule.
+
+## Run from a fresh cloud task
+
+1. Make a fresh Sites `get_site` call for project `appgprj_6af3a5b6e71881919b36a67554bf1e6e`. Verify the returned project is exactly that project, the current user has the owner role, the sharing mode is public or owner-only, and the live origin is exactly `https://des-personal-site-preview.playfulporpoise2.chatgpt.site`. Stop and report a mismatch or any other sharing mode; never change access from this task. Keep the current live URL and `siwc_bypass_bearer_token` from this fresh response in memory only. Do not generate or rotate tokens, log them, or write them to files. The `.com` website remains a separate Netlify deployment and is not an automation target.
+2. Fetch `/automation/devto-updater.mjs` from that exact live origin with `OAI-Sites-Authorization: Bearer <token>`. Disable redirects. Save only the script into the task's work directory. It is a self-contained Node.js program built from this Site's committed source; no dependency installation is needed. This instructions file is also available at `/automation/DEVTO.md`.
+3. Launch `node --use-env-proxy <downloaded-script-path>` with Node.js 24.5+ and a PTY. Preserve the cloud environment's existing proxy and CA trust. Wait for `Ready for Site access JSON on stdin (input is hidden).` Then send one JSON line through stdin: `{ "url": "<current live Site URL>", "token": "<service token>" }`. Never put the token in command arguments or files.
+4. The updater reads the current archive, fetches every page of DEV.to summaries and the full body of new/edited posts, sanitizes content, and sends an update to `/api/sync-devto`. The updater also sends the service token in the standard Authorization header, only to the same fixed Site origin and without following redirects. The Site checks its SHA-256 verifier from the secret runtime setting WRITING_SERVICE_TOKEN_SHA256, independently of visitor access. It revalidates the author, metadata, content, and expected archive revision before a persistent write, retaining the previous successful archive for recovery. It then reads `/api/sync-status` and verifies count and completion time, including when no articles changed. A successful run prints `persistedReadback: true` and the counts, without credentials.
+5. If a request fails, existing data remains available. Retry the whole updater once after a short delay for a transient source error or an archive-revision conflict. Do not retry authorization failures, alter sharing, delete old posts, rebuild, or republish. Report unresolved errors.
+
+DEV.to rejects direct requests from the hosting server, so fetching takes place in the cloud task. The task runs while the Site is closed. This is a data update, not a deployment.
+
+## Reliability and recovery
+
+- `/api/health` reports `ok` after a successful sync within 48 hours, `sync-overdue` after that window, or `awaiting-sync` before the first successful stored sync. A failed or invalid storage read returns HTTP 503 with `storage-unavailable`; readers receive the deployed fallback archive where possible.
+- The scheduled task must report unresolved failures in its task result. The health endpoint is a diagnostic check; it does not send notifications. No external monitoring or push-alert service is configured.
+- The current archive is `writing/archive-v1.json`. Before a later successful import replaces it, the writer saves the previous valid archive to `writing/previous-v1.json`. Only one previous version is kept; this is not a full historical backup. A backup write failure stops the import before replacing the current archive.
+- The writer rejects stale expected revisions and malformed imports. Run one updater at a time; R2 revision checks and the two writes are not a transactional lock for overlapping updaters. A failed fetch never reaches the writer. After an uncertain network/write response, read sync status before retrying.
+- `/api/articles/:slug` serves a single full article without the raw Markdown field. `/feed.xml` serves RSS using the saved archive. These reads do not trigger a sync.
+
+## Source and local development
+
+The reviewed source is `scripts/update-hosted-writing.mjs`, `server/devto.mjs`, `server/importArchive.mjs`, and `server/worker.mjs`. Sites source access is available through `create_source_repository_write_credential` if source review is needed. Never persist its credential.
+
+`npm ci && npm run setup` installs build and client dependencies. `npm run build:site` produces `dist/server/index.js`, including the self-contained updater and these instructions. `.openai/hosting.json` in the Sites checkout retains its project ID, omits `static`, and sets `r2` to `BUCKET`. `npm run test:server` verifies ingestion, validation, HTML rendering, and artifact handlers. `npm run sync:writing` remains available for updating the static fallback snapshot.
+
+The writer requires its own bearer authorization on every update, even when a caller passes the Site visitor gate. WRITING_SERVICE_TOKEN_SHA256 is set through Sites runtime secrets; never put a raw token or verifier in source or client code. If the service token is rotated, its verifier must be updated through Sites and deployed before the next import. The writer and private reporting endpoints require their own service authorization regardless of whether the website is public or owner-only. Public visitor access never authorizes an import or access to private reports. The current launch expects this exact platform origin to be public; an intentional owner-only maintenance period may still use the same authenticated update procedure. Do not change sharing as part of an update.

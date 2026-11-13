@@ -1,0 +1,19 @@
+{
+  "name": "des-personal-site-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Desmond Gilmour's personal website: resume, blog posts, and projects.",
+  "scripts": {
+    "setup": "npm --prefix client ci",
+    "start": "npm --prefix client start",
+    "build": "npm --prefix client run build",
+    "test": "npm --prefix client test --",
+    "sync:writing": "node --use-env-proxy scripts/sync-devto.mjs",
+    "build:site": "npm run build && node scripts/build-worker.mjs",
+    "test:server": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "sanitize-html": "^2.18.1"
+  }
+}

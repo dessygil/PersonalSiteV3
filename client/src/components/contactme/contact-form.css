@@ -1,0 +1,37 @@
+.contact-section .contact-form {
+  position: relative;
+  max-width: 700px;
+  margin: 30px auto 26px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius, 10px);
+  background: var(--white);
+  text-align: left;
+  box-shadow: var(--card-shadow);
+}
+.contact-section form.contact-form p { max-width: none; margin: 0; line-height: 1.65; }
+.contact-section .contact-form .contact-form-description { margin-bottom: 24px; font-size: .83rem; color: var(--muted); }
+.contact-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.contact-field { min-width: 0; }
+.contact-message-field { grid-column: 1 / -1; }
+.contact-field label { display: block; margin-bottom: 9px; font-size: .85rem; font-weight: 600; color: var(--ink); }
+.contact-field input, .contact-field textarea { display: block; width: 100%; min-height: 46px; padding: 11px 13px; border: 1px solid #bdc9dc; border-radius: 6px; background: var(--white); color: var(--ink); font: inherit; font-size: 1rem; line-height: 1.55; }
+.contact-field textarea { min-height: 155px; resize: vertical; }
+.contact-field input:focus-visible, .contact-field textarea:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.contact-field [aria-invalid="true"] { border-color: #a33b35; }
+.contact-section .contact-form .contact-field-error { margin-top: 7px; color: #a33b35; font-size: .8rem; }
+.contact-submit-row { display: flex; flex-wrap: wrap; margin-top: 25px; }
+.contact-submit-row .primary-link { min-height: 46px; }
+.contact-form button:disabled { cursor: wait; opacity: .7; }
+.contact-fields:disabled input, .contact-fields:disabled textarea { background: var(--paper); color: var(--muted); }
+.contact-section .contact-form .contact-form-status { margin-top: 19px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft-blue); color: var(--ink); font-size: .85rem; }
+.contact-section .contact-form .contact-status-error, .contact-section .contact-form .contact-status-invalid { color: #8d2e29; border-color: #e9c8c5; background: #fff6f5; }
+.contact-sr-only, .contact-honeypot { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+.contact-direct-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px 28px; }
+.contact-section .contact-direct-links .text-link { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; margin: 0; }
+.contact-direct-links .text-link > span { margin-left: 0; }
+@media (max-width: 640px) {
+  .contact-section .contact-form { padding: 22px 18px; }
+  .contact-fields { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .contact-submit-row .primary-link { width: 100%; }
+}

@@ -1,0 +1,106 @@
+{
+  "sourceUrl": "https://github.com/dessygil?tab=repositories",
+  "fetchedAt": "2026-11-11T00:42:51.597Z",
+  "projects": [
+    {
+      "name": "CRUD-ObservabilityV1",
+      "description": "CRUD app written in go",
+      "url": "https://github.com/dessygil/CRUD-ObservabilityV1",
+      "homepage": null,
+      "language": "Go",
+      "createdAt": "2023-10-31T01:19:56Z",
+      "archived": false,
+      "fork": false
+    },
+    {
+      "name": "V2DesPersonalSite",
+      "description": "Version 2 of my personal site",
+      "url": "https://github.com/dessygil/V2DesPersonalSite",
+      "homepage": null,
+      "language": "TypeScript",
+      "createdAt": "2023-04-20T03:11:23Z",
+      "archived": false,
+      "fork": false
+    },
+    {
+      "name": "LMS-MSD",
+      "description": "Laboratory Information Management System",
+      "url": "https://github.com/dessygil/LMS-MSD",
+      "homepage": null,
+      "language": "Python",
+      "createdAt": "2023-03-29T13:27:19Z",
+      "archived": false,
+      "fork": false
+    },
+    {
+      "name": "pytorch-perian",
+      "description": "Currently working on Pytorch in order to apply it to chemistry applications by taking a udemy course from peirian data",
+      "url": "https://github.com/dessygil/pytorch-perian",
+      "homepage": null,
+      "language": "Jupyter Notebook",
+      "createdAt": "2023-02-10T04:16:03Z",
+      "archived": false,
+      "fork": false
+    },
+    {
+      "name": "valentines-day-react",
+      "description": "A short React project used to ask my partner to be valentine and will send an alert to me when Yes is clicked",
+      "url": "https://github.com/dessygil/valentines-day-react",
+      "homepage": null,
+      "language": "JavaScript",
+      "createdAt": "2023-01-28T20:30:10Z",
+      "archived": false,
+      "fork": false
+    },
+    {
+      "name": "des-personal-site-backend",
+      "description": "Backend so I am better able to deploy on Heroku",
+      "url": "https://github.com/dessygil/des-personal-site-backend",
+      "homepage": null,
+      "language": "JavaScript",
+      "createdAt": "2023-01-15T18:02:45Z",
+      "archived": false,
+      "fork": false
+    },
+    {
+      "name": "des-dog-walk",
+      "description": "I have always wanted to be a dog walker and I now have the skills to make it happen using this website to create a schedule",
+      "url": "https://github.com/dessygil/des-dog-walk",
+      "homepage": null,
+      "language": "CSS",
+      "createdAt": "2023-01-07T05:09:06Z",
+      "archived": false,
+      "fork": false
+    },
+    {
+      "name": "HouseParty",
+      "description": "A room sharing app to listen to music with people that have similar tastes",
+      "url": "https://github.com/dessygil/HouseParty",
+      "homepage": null,
+      "language": "JavaScript",
+      "createdAt": "2022-11-20T20:25:04Z",
+      "archived": false,
+      "fork": false
+    },
+    {
+      "name": "FraternityAdventure",
+      "description": "I think I was watching Cherdleys (Comedians) when I thought of the theme of the game",
+      "url": "https://github.com/dessygil/FraternityAdventure",
+      "homepage": null,
+      "language": "Java",
+      "createdAt": "2022-10-10T17:17:35Z",
+      "archived": false,
+      "fork": false
+    },
+    {
+      "name": "alphatoe",
+      "description": "AlphaToe is to tic tac toe as AlphaGo is GO. Try and beat it!",
+      "url": "https://github.com/dessygil/alphatoe",
+      "homepage": null,
+      "language": "C",
+      "createdAt": "2022-09-29T02:52:10Z",
+      "archived": false,
+      "fork": false
+    }
+  ]
+}

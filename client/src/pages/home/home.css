@@ -1,0 +1,55 @@
+.main-page {
+  display: flex;
+  flex-direction: column;
+  counter-reset: homePageCounter;
+  gap: 10vh;
+}
+
+.main-page > section {
+  margin: 0;
+}
+
+.main-page-molecule-opener {
+  margin-bottom: 10vh;
+}
+
+.molecule{
+  align-self: flex-start;
+}
+
+.main-page-molecule-opener {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin: 0 0 40px;
+}
+
+.numbered-heading {
+  display: flex;
+  align-items: center;
+  position: relative;
+  margin: 10px 0 40px;
+  width: 100%;
+  white-space: nowrap;
+  font-size: 2em;
+}
+
+.numbered-heading::before {
+  position: relative;
+  counter-increment: homePageCounter;
+  content: "0" counter(homePageCounter) ".";
+  margin-right: 10px;
+  font-weight: 400;
+  font-size: 1em;
+  font-family: "Roboto Mono", monospace;
+}
+
+.numbered-heading:after {
+  content: "";
+  display: block;
+  position: relative;
+  width: 300px;
+  height: 1px;
+  margin-left: 20px;
+  background-color: rgb(218, 216, 216);
+}

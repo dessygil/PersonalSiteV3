@@ -1,0 +1,27 @@
+.writing-topic-navigation{margin:0 0 28px}
+.writing-topic-navigation h2{font-size:.82rem;font-weight:650;margin:0 0 13px}
+.writing-topic-links{display:flex;flex-wrap:wrap;gap:9px;list-style:none;margin:0;padding:0}
+.writing-topic-links>li{margin:0}
+.writing-topic-links a{display:inline-flex;align-items:center;gap:10px;min-height:38px;padding:7px 12px;border:1px solid var(--line);border-radius:5px;background:var(--white);color:var(--blue);font-size:.78rem;line-height:1.5}
+.writing-topic-links a>span{color:var(--muted);font-size:.7rem}
+.writing-topic-links a:hover{background:var(--soft-blue);border-color:var(--blue)}
+.writing-more-topics{margin-top:12px}
+.writing-more-topics>summary{width:fit-content;cursor:pointer;padding:7px 0;font-size:.78rem;font-weight:600;color:var(--blue)}
+.writing-more-topics .writing-topic-links{margin-top:10px}
+.writing-topic-links a:focus-visible,.writing-more-topics>summary:focus-visible,.article-toc a:focus-visible,.article-toc summary:focus-visible,.article-tags>a:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+.topic-page{padding-top:35px}
+.topic-page>.back-link{display:inline-block;margin-bottom:0}
+.topic-intro{padding-top:30px}
+.topic-intro strong{font-weight:600}
+.topic-related{border-top:1px solid var(--line);padding-top:28px;margin:45px 0 0}
+.article-header .article-tags>a{display:inline-flex;align-items:center;min-height:32px;padding:5px 9px;border:1px solid var(--line);border-radius:4px;font-size:.7rem;color:var(--blue);text-decoration:none}
+.article-header .article-tags>a:hover{background:var(--soft-blue);text-decoration:underline}
+.article-toc{max-width:760px;margin:0 auto 34px;border:1px solid var(--line);border-radius:7px;background:var(--white);padding:18px 23px}
+.article-toc summary{cursor:pointer;font-size:.87rem;font-weight:650;color:var(--ink);padding:4px 0}
+.article-toc ol{margin:15px 0 4px;padding-left:20px;display:grid;gap:9px}
+.article-toc li{color:var(--muted);font-size:.83rem;line-height:1.65;margin-top:0}
+.article-toc a{color:var(--blue);text-decoration:none}
+.article-toc a:hover{text-decoration:underline}
+.article-toc-level-3{margin-left:14px}.article-toc-level-4{margin-left:28px}.article-toc-level-5,.article-toc-level-6{margin-left:40px}
+.article-prose :is(h2,h3,h4,h5,h6)[id]{scroll-margin-top:100px}
+@media(max-width:640px){.writing-topic-links{gap:8px}.writing-topic-links a{min-height:44px}.article-toc{padding:17px 18px;margin-bottom:28px}.article-toc li{font-size:.82rem}.topic-page{padding-top:25px}}

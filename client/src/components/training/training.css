@@ -1,0 +1,19 @@
+.training-layout{max-width:740px}
+.training-layout-with-widget{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:48px;max-width:none;align-items:start}
+.training-intro .section-heading{margin-bottom:22px}
+.training-intro .section-heading h2{max-width:580px}
+.training-intro .section-summary{max-width:580px}
+.training-profile-link{margin-top:24px}
+.training-widget-panel{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--white);overflow:hidden}
+.training-widget-panel h3{font-size:.9rem;font-weight:600;margin:0;padding:19px 22px;border-bottom:1px solid var(--line)}
+.training-widget-consent{padding:23px 22px}
+.training-widget-consent>p{font-size:.9rem;line-height:1.65;margin:0 0 15px;color:var(--muted)}
+.training-widget-consent>.training-widget-privacy{font-size:.76rem;margin-bottom:22px}
+.training-widget-consent button{font:inherit;font-size:.83rem;min-height:44px;cursor:pointer}
+.training-widget-consent button:focus-visible,.training-profile-link:focus-visible{outline:3px solid var(--blue);outline-offset:4px}
+.training-widgets{display:grid;gap:12px;padding:12px 0}
+.training-widget{display:block;width:300px;max-width:100%;margin:0 auto;border:0;background:var(--white)}
+.training-widget-summary{height:160px}
+.training-widget-latest{height:454px}
+@media(max-width:800px){.training-layout-with-widget{grid-template-columns:minmax(0,1fr);gap:30px}.training-widget-panel{max-width:420px;width:100%}}
+@media(max-width:480px){.training-widget-panel h3,.training-widget-consent{padding-left:18px;padding-right:18px}}

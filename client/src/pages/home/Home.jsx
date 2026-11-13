@@ -8,7 +8,7 @@ import BlogIntro from "../../components/blogintro/BlogIntro";
 import ContactMe from "../../components/contactme/ContactMe";
 import Training from "../../components/training/Training";
 import { getSiteConfig } from "../../lib/siteConfig";
-export default function Home({ articles, config = getSiteConfig() }) {
+export default function Home({ articles, config = getSiteConfig(), initialMessage }) {
   usePageNavigation();
-  return <div className="home-page"><MeIntro /><About /><Experience /><BlogIntro articles={articles} /><Training config={config} /><Portfolio /><ContactMe config={config} /></div>;
+  return <div className="home-page"><MeIntro /><About /><Experience /><BlogIntro articles={articles} /><Training config={config} /><Portfolio /><ContactMe config={config} initialMessage={initialMessage} /></div>;
 }

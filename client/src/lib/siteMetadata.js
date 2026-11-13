@@ -39,11 +39,12 @@ export function createPageMetadata({ articles = [], path = "/", origin }) {
   const url = new URL(normalizedPath, home).href;
   const person = personMetadata(home);
   const noindex = !["/", "/writing"].includes(normalizedPath) && !article && !topic;
-  const title = article ? `${article.title} | ${SITE_NAME}`
+  const dashboard = normalizedPath === "/dashboard/writing";
+  const title = dashboard ? `Private writing dashboard | ${SITE_NAME}` : article ? `${article.title} | ${SITE_NAME}`
     : topic ? `${topic.title} | Writing | ${SITE_NAME}`
     : normalizedPath === "/writing" ? `Writing | ${SITE_NAME}`
       : noindex ? `Page not found | ${SITE_NAME}` : `${SITE_NAME} | Experience, projects & writing`;
-  const description = article ? article.description || WRITING_DESCRIPTION
+  const description = dashboard ? "Private writing statistics for the site owner." : article ? article.description || WRITING_DESCRIPTION
     : topic ? `${topic.articles.length} ${topic.articles.length === 1 ? "article" : "articles"} by ${SITE_NAME} about ${topic.title}.`
     : normalizedPath === "/writing" ? WRITING_DESCRIPTION
       : noindex ? "This page could not be found. Explore Desmond Gilmour’s experience, projects, and writing." : SITE_DESCRIPTION;

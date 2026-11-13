@@ -1,4 +1,4 @@
-const pageIds = ["article-heading", "article-toc-heading", "continue-reading", "main"];
+const pageIds = ["article-heading", "article-toc-heading", "article-actions-heading", "article-helpful-count", "article-share-link", "continue-reading", "main"];
 
 function headingSlug(text) {
   return String(text || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()

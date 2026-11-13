@@ -34,6 +34,27 @@ const article = (id = 1, extra = {}) => ({
   author: { name: 'Desmond Gilmour', username: 'dessygil' }, ...extra,
 });
 const withoutScripts = html => html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+test('writing dashboard shell is noindex and never contains private statistics', () => {
+  const html = renderPage(template, [article()], '/dashboard/writing', origin);
+  assert.match(html, /Private writing dashboard/);
+  assert.match(html, /noindex/);
+  assert.match(html, /return_to=%2Fdashboard%2Fwriting/);
+  assert.ok(!html.includes('Page not found'));
+  assert.ok(!html.includes('websiteViews'));
+});
+test('article static HTML offers local sharing and question links', () => {
+  const html = renderPage(template, [article()], '/writing/post-1', origin);
+  assert.match(html, /sharing\/share-offsite/);
+  assert.ok(html.includes(encodeURIComponent(`${origin}/writing/post-1`)));
+  assert.ok(html.includes('/?article=post-1#Contact-anchor'));
+});
+test('article question prefill is present in HTML without JavaScript and uses only known articles', () => {
+  const html = renderPage(template, [article()], '/', origin, value => value, {}, '?article=post-1');
+  assert.match(html, /I have a question about your article/);
+  assert.ok(html.includes(`${origin}/writing/post-1`));
+  const unknown = renderPage(template, [article()], '/', origin, value => value, {}, '?article=not-published');
+  assert.ok(!unknown.includes('I have a question about your article'));
+});
 function schema(html) {
   const found = html.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
   assert.ok(found, 'JSON-LD must be present');

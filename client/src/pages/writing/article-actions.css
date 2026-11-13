@@ -1,0 +1,19 @@
+.article-actions { max-width: 760px; margin: 40px auto 0; padding: 26px; border: 1px solid var(--line); border-radius: var(--card-radius, 10px); background: var(--white); }
+.article-actions h2 { margin: 0 0 20px; font-size: 1.35rem; font-weight: 650; letter-spacing: -.025em; }
+.article-reaction-row, .article-share-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.article-action-button { display: inline-flex; justify-content: center; align-items: center; gap: 9px; min-height: 44px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--blue); font: inherit; font-size: .82rem; font-weight: 550; line-height: 1.5; cursor: pointer; }
+.article-action-button:hover { background: var(--soft-blue); border-color: var(--blue); color: var(--blue); }
+.article-helpful-button[aria-pressed="true"] { border-color: var(--blue); background: var(--soft-blue); }
+.article-helpful-button > span { font-size: 1.1rem; line-height: 1; }
+.article-action-button:disabled { cursor: default; opacity: .65; }
+.article-helpful-count { color: var(--muted); font-size: .78rem; line-height: 1.6; }
+.article-share-row { margin-top: 23px; padding-top: 22px; border-top: 1px solid var(--line); }
+.article-action-feedback { margin-top: 10px; color: var(--muted); font-size: .8rem; line-height: 1.65; }
+.article-action-feedback:empty { display: none; }
+.article-action-retry { min-height: 44px; padding: 6px 0; border: 0; background: none; color: var(--blue); font-size: .8rem; text-decoration: underline; text-underline-offset: 3px; }
+.article-question-link { margin-top: 23px; }
+.article-manual-copy { margin-top: 15px; }
+.article-manual-copy label { display: block; margin-bottom: 8px; font-size: .8rem; font-weight: 600; }
+.article-manual-copy input { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: var(--paper); font-size: 1rem; }
+.article-actions :is(button, a, input):focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; }
+@media (max-width: 640px) { .article-actions { padding: 22px 18px; } .article-share-row { gap: 10px; } .article-question-link { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; } }

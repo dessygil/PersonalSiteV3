@@ -7,6 +7,7 @@ import { formatDate } from "../../lib/writing";
 import useArticleDetails from "../../lib/useArticleDetails";
 import { createArticleHeadings } from "../../lib/articleHeadings";
 import { topicSlug } from "../../lib/writingTopics";
+import ArticleActions from "./ArticleActions";
 export function prepareArticleContent(html) {
   const fragment = DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS: ["style", "form", "input", "button", "iframe", "video", "audio"], FORBID_ATTR: ["style", "srcdoc", "srcset", "tabindex"], RETURN_DOM_FRAGMENT: true });
   fragment.querySelectorAll(".highlight__panel").forEach(panel => panel.remove());
@@ -81,6 +82,7 @@ export default function Article() {
         {failed && <p role="alert">This article could not be loaded. <a className="text-link" href={article.sourceUrl}>Read it on DEV.to ↗</a></p>}
         {headings.length > 0 && <nav className="article-toc" aria-label="On this page"><details open><summary>On this page</summary><ol>{headings.map(heading => <li key={heading.id} className={`article-toc-level-${heading.level}`}><Link to={`#${encodeURIComponent(heading.id)}`}>{heading.text}</Link></li>)}</ol></details></nav>}
         <div className="article-prose" dangerouslySetInnerHTML={{ __html: html }} />
+        {article.bodyHtml && !loading && !failed && <ArticleActions key={article.slug} article={article} />}
         <footer className="article-source"><span className="article-source-label">From the archive</span><p>Originally published on <a href={article.sourceUrl}>DEV.to</a>. Thanks for reading.</p></footer>
       </article>
       <aside className="related-writing" aria-labelledby="continue-reading">

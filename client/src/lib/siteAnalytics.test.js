@@ -18,6 +18,15 @@ function browser(overrides = {}) {
   };
 }
 const payloads = environment => environment.fetch.mock.calls.map(([, request]) => JSON.parse(request.body));
+test("private dashboard visits and actions are excluded from public analytics", () => {
+  const environment = browser({ location: { origin: platformOrigin, pathname: "/dashboard/writing" } });
+  const controller = createAnalyticsController(environment);
+  const active = controller.acquire(config);
+  active.page("/dashboard/writing");
+  expect(controller.track(ANALYTICS_EVENTS.linkedinClick)).toBe(false);
+  expect(environment.fetch).not.toHaveBeenCalled();
+  active.release();
+});
 function click(environment, href, properties = {}) {
   const link = environment.document.createElement("a");
   link.href = href;

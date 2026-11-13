@@ -1,10 +1,28 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getSiteConfig } from "../../lib/siteConfig";
 import { trackContactSuccess } from "../../lib/siteAnalytics";
+import articles from "../../lib/writingData";
 import "./contact-form.css";
 
 const emailAddress = "desmondgilmour@gmail.com";
 const emptyFields = { name: "", email: "", message: "", _gotcha: "" };
+
+export function articleQuestionMessage(search, origin, articleIndex = articles) {
+  const slug = new URLSearchParams(search || "").get("article");
+  const article = articleIndex.find(item => item.slug === slug);
+  if (!article || typeof article.title !== "string") return "";
+  try {
+    const site = new URL(origin);
+    if (!["http:", "https:"].includes(site.protocol)) return "";
+    const articleUrl = new URL(`/writing/${encodeURIComponent(article.slug)}`, site.origin).href;
+    return `Hi Desmond,\n\nI have a question about your article "${article.title}":\n${articleUrl}\n\n`;
+  } catch { return ""; }
+}
+
+function initialFields(initialMessage) {
+  const message = typeof initialMessage === "string" ? initialMessage : typeof window === "undefined" ? "" : articleQuestionMessage(window.location.search, window.location.origin);
+  return { ...emptyFields, message };
+}
 
 function validate(fields) {
   const errors = {};
@@ -22,9 +40,10 @@ export function emailDraft(fields) {
   return `mailto:${emailAddress}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-export default function ContactMe({ config = getSiteConfig() }) {
+export default function ContactMe({ config = getSiteConfig(), initialMessage }) {
   const endpoint = config?.contact?.endpoint === "/api/contact" ? "/api/contact" : null;
-  const [fields, setFields] = useState(emptyFields);
+  // Resolve the article once. Later renders must not replace a visitor's draft.
+  const [fields, setFields] = useState(() => initialFields(initialMessage));
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState({ type: "idle", message: "" });
   const [enhanced, setEnhanced] = useState(false);

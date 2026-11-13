@@ -72,6 +72,7 @@ export function createAnalyticsController(browser) {
 
   function send(event, path) {
     if (!allowed() || typeof browser.fetch !== "function") return false;
+    if (typeof path === "string" && /^\/dashboard(?:\/|$)/.test(path)) return false;
     const payload = { event, path: analyticsPath(path), referrer: analyticsReferrer(document.referrer) };
     try {
       const response = browser.fetch(ANALYTICS_ENDPOINT, {
@@ -111,6 +112,7 @@ export function createAnalyticsController(browser) {
       return {
         page(pathname) {
           if (released || !allowed()) return;
+          if (typeof pathname === "string" && /^\/dashboard(?:\/|$)/.test(pathname)) return;
           const path = analyticsPath(pathname);
           if (path !== lastPage && send("pageview", path)) lastPage = path;
         },

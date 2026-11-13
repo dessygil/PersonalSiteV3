@@ -6,6 +6,8 @@ import { renderPage, sitemap, rss } from './pages.mjs';
 import { findWritingTopic } from '../client/src/lib/writingTopics.js';
 import { publicSiteConfig } from './runtimeConfig.mjs';
 import { handleEngagement } from './engagement.mjs';
+import { handleArticleReactions } from './articleReactions.mjs';
+import { handleWritingDashboard } from './writingDashboard.mjs';
 
 const key = 'writing/archive-v1.json';
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
@@ -23,6 +25,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/$/, '') || '/';
+    const dashboard = await handleWritingDashboard(request, env);
+    if (dashboard) return dashboard;
+    const reactions = await handleArticleReactions(request, env);
+    if (reactions) return reactions;
     const engagement = await handleEngagement(request, env);
     if (engagement) return engagement;
     if (path === '/api/sync-devto') {
@@ -60,7 +66,7 @@ export default {
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
     let saved;
     let archiveReadFailed = false;
-    if (path.startsWith('/api/') || path === '/' || path === '/writing' || path.startsWith('/writing/') || path === '/sitemap.xml' || path === '/feed.xml') {
+    if (path.startsWith('/api/') || path === '/' || path === '/dashboard/writing' || path === '/writing' || path.startsWith('/writing/') || path === '/sitemap.xml' || path === '/feed.xml') {
       try { saved = await archive(env); } catch { saved = { articles: snapshot, lastSyncedAt: null }; archiveReadFailed = true; }
     }
     if (path === '/api/sync-status') return json({ count: saved.articles.length, lastSyncedAt: saved.lastSyncedAt, source: saved.source || 'https://dev.to/dessygil', imported: saved.imported ?? 0, updated: saved.updated ?? 0 });
@@ -74,7 +80,7 @@ export default {
     if (path === '/api/health') return json({ status: archiveReadFailed ? 'storage-unavailable' : env.BUCKET && saved.lastSyncedAt ? (Date.now() - Date.parse(saved.lastSyncedAt) < 48 * 3600000 ? 'ok' : 'sync-overdue') : 'awaiting-sync', articleCount: saved.articles.length, lastSyncedAt: saved.lastSyncedAt }, archiveReadFailed ? 503 : 200);
     if (path === '/sitemap.xml') return new Response(sitemap(saved.articles, url.origin), { headers: { 'Content-Type': 'application/xml; charset=utf-8' } });
     if (path === '/feed.xml') return new Response(rss(saved.articles, url.origin), { headers: { 'Content-Type': 'application/rss+xml; charset=utf-8' } });
-    if (path === '/robots.txt') return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /automation/\nSitemap: ${url.origin}/sitemap.xml\n`, { headers: { 'Content-Type': 'text/plain' } });
+    if (path === '/robots.txt') return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /automation/\nDisallow: /dashboard/\nSitemap: ${url.origin}/sitemap.xml\n`, { headers: { 'Content-Type': 'text/plain' } });
     const asset = assets[path];
     if (asset) {
       const decoded = atob(asset.data);
@@ -84,8 +90,8 @@ export default {
     }
     const articles = saved?.articles || snapshot;
     const topicSlug = path.match(/^\/writing\/topics\/([^/]+)$/)?.[1];
-    const found = path === '/' || path === '/writing' || (topicSlug && findWritingTopic(articles, topicSlug)) || articles.some(item => path === `/writing/${item.slug}`);
-    const html = renderPage(template, articles, path, url.origin, sanitizeBody, publicSiteConfig(env, url.origin));
-    return new Response(request.method === 'HEAD' ? null : html, { status: found ? 200 : 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin' } });
+    const found = path === '/' || path === '/writing' || path === '/dashboard/writing' || (topicSlug && findWritingTopic(articles, topicSlug)) || articles.some(item => path === `/writing/${item.slug}`);
+    const html = renderPage(template, articles, path, url.origin, sanitizeBody, publicSiteConfig(env, url.origin), url.search);
+    return new Response(request.method === 'HEAD' ? null : html, { status: found ? 200 : 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': path.startsWith('/dashboard/') ? 'no-store' : 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': path.startsWith('/dashboard/') ? 'no-referrer' : 'strict-origin-when-cross-origin', ...(path.startsWith('/dashboard/') ? { 'X-Robots-Tag': 'noindex, nofollow' } : {}) } });
   }
 };

@@ -52,3 +52,56 @@ in the existing 9 AM Toronto task. This is not continuous uptime monitoring.
 
 The server projects only public configuration into HTML. The writer verifier,
 private inbox records, and other environment values must never enter client code.
+
+## Article reactions and sharing
+
+Each full article offers a Helpful button with undo, Copy link, LinkedIn sharing,
+and the browser's native share sheet when supported. Sharing always uses the
+website article URL. Ask me about this article opens the existing contact form
+with a known article's title and URL; visitors still review and send their message.
+
+Reactions use a random browser-local identifier, hashed per article on the server,
+conditional storage writes, and hashed-IP rate limits. No raw IP is retained.
+This is basic repeat protection: clearing browser storage or using another device
+can allow another mark. Helpful counts are website-only and are not unique readers.
+This identifier is separate from aggregate, identifier-free traffic analytics.
+Keep `REACTION_HMAC_SECRET` as a stable 64-hex-character native runtime secret,
+independent of the rotating writer service credential. Changing the reaction
+secret requires a voter-identity migration; do not rotate it as routine maintenance.
+
+## Private writing dashboard
+
+Visit `/dashboard/writing` and sign in with the site owner's existing ChatGPT
+account. Sites supplies authenticated identity headers. Every dashboard API
+checks a signed-in ID plus the configured `WRITING_OWNER_EMAIL` server-side,
+or the existing independently verified service bearer. Other signed-in visitors
+cannot access the statistics. The dashboard shell contains no private data and
+is excluded from indexing and public traffic collection. The contact inbox keeps
+its separate service-only authorization.
+
+Set `WRITING_OWNER_EMAIL` as a native Sites runtime secret using the verified site
+owner's account email, never a public environment variable or client constant.
+Optionally set `DEVTO_ANALYTICS_API_KEY` as a runtime secret. Without it, the owner
+can enter a DEV.to key in the private import form for that request only; it is not
+saved, logged, or placed in a URL. Do not paste credentials into chat or source.
+The import verifies the DEV.to account is `dessygil`, fetches owned published
+articles, and stores validated counts without saving the key.
+
+Substack and Medium statistics can be entered manually or in the dashboard's CSV
+template. These are cumulative per-article view snapshots, not monthly increments.
+Match each external article to its local article and supply the observation date.
+An updated snapshot replaces the earlier one; importing twice must not add it twice.
+One external article URL can map to only one local article within each platform.
+Substack offers a post-statistics CSV in Analytics → Stats → Posts; adapt its columns
+to the dashboard template after reviewing them. Medium has no supported analytics
+API or documented story-view CSV export, so copy its reported counts into the form
+or template. No unsupported scraping or session-cookie access is used.
+
+The combined total is **reported views from available sources**, not unique people.
+Website totals cover records collected by this application; they do not backfill
+old Netlify visits. External columns use latest imported cumulative counts and
+show their observation dates; missing sources remain blank rather than zero.
+The 30-day trend covers website article views only. Substack counts web/email/app
+views; Medium uses its own time thresholds and daily deduplication. No automatic
+Substack/Medium sync is implied. The existing DEV.to content sync remains separate
+from owner-only view statistics.

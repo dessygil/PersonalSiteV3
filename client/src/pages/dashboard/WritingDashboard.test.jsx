@@ -2,20 +2,27 @@ import React from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom";
-import WritingDashboard, { parseWritingStatsCsv } from "./WritingDashboard";
+import WritingDashboard, { parseWritingStatsCsv, periodChartBuckets } from "./WritingDashboard";
 
 jest.mock("../../lib/usePageNavigation", () => jest.fn());
 const originalFetch = global.fetch;
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 const snapshot = () => ({
   articles: [
-    { slug: "first-article", title: "First article", websiteViews: 12, likes: 3, devto: { views: 30, asOf: "2026-11-13T00:00:00.000Z", url: "https://dev.to/dessygil/first-article" }, substack: null, medium: null, totalViews: 42 },
-    { slug: "second-article", title: "Second article", websiteViews: 0, likes: 0, devto: null, substack: { views: 0, asOf: "2026-11-13T00:00:00.000Z", url: "https://example.substack.com/p/second" }, medium: null, totalViews: 0 },
+    { slug: "first-article", title: "First article", periodWebsiteViews: 5, websiteViews: 12, likes: 3, devto: { views: 30, asOf: "2026-11-13T00:00:00.000Z", url: "https://dev.to/dessygil/first-article" }, substack: null, medium: null, totalViews: 42 },
+    { slug: "second-article", title: "Second article", periodWebsiteViews: 1, websiteViews: 0, likes: 0, devto: null, substack: { views: 0, asOf: "2026-11-13T00:00:00.000Z", url: "https://example.substack.com/p/second" }, medium: null, totalViews: 0 },
   ],
   totals: { websiteViews: 12, likes: 3, devtoViews: 30, substackViews: 0, mediumViews: null, reportedViews: 42 },
   daily: [{ day: "2026-11-12", views: 2 }, { day: "2026-11-13", views: 4 }],
+  period: { range: "30d", from: "2026-10-15", to: "2026-11-13", today: "2026-11-13", timeZone: "America/Toronto", websiteSince: "2026-11-01", includesUnrecordedDays: true, includesToday: true, totalWebsiteViews: 6, selectedArticle: null, selectedArticleViews: 6, daily: [{ day: "2026-10-15", views: null }, { day: "2026-11-12", views: 2 }, { day: "2026-11-13", views: 4 }] },
   coverage: { websiteSince: "2026-11-01", generatedAt: "2026-11-13T18:00:00Z", lastUpdated: "2026-11-13T17:00:00Z", analyticsEnabled: true, platforms: { devto: { reportedArticles: 1, totalArticles: 2, earliestAsOf: "2026-11-13T00:00:00Z", latestAsOf: "2026-11-13T00:00:00Z" }, substack: { reportedArticles: 1, totalArticles: 2 }, medium: { reportedArticles: 0, totalArticles: 2 } } },
 });
+function periodSnapshot(period, counts) {
+  const data = snapshot();
+  data.period = { ...data.period, ...period };
+  if (counts) data.articles = data.articles.map((article, index) => ({ ...article, periodWebsiteViews: counts[index] }));
+  return data;
+}
 function mount() { return render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><WritingDashboard /></MemoryRouter>); }
 async function loaded() { await screen.findByRole("heading", { name: "Views across your writing" }); }
 beforeEach(() => { global.fetch = jest.fn().mockResolvedValue(response(snapshot())); });
@@ -30,7 +37,7 @@ test("anonymous readers only see the normal top-level ChatGPT sign-in flow", asy
   expect(signIn).toHaveAttribute("target", "_top");
   expect(screen.queryByText("First article")).not.toBeInTheDocument();
   expect(screen.queryByRole("form")).not.toBeInTheDocument();
-  expect(fetch).toHaveBeenCalledWith("/api/private/writing-dashboard", expect.objectContaining({ credentials: "same-origin", cache: "no-store", method: "GET" }));
+  expect(fetch).toHaveBeenCalledWith("/api/private/writing-dashboard?range=30d", expect.objectContaining({ credentials: "same-origin", cache: "no-store", method: "GET" }));
 });
 
 test("non-owners never receive statistics or import controls", async () => {
@@ -52,8 +59,8 @@ test("reported snapshots remain distinct from zero, website views, and unique re
   expect(screen.queryByText(/As of Nov 12, 2026/)).not.toBeInTheDocument();
   expect(screen.getByText(/Views are not unique readers/)).toBeInTheDocument();
   expect(screen.getByText(/Incomplete coverage/)).toBeInTheDocument();
-  expect(screen.getByRole("img", { name: /Daily website article views: 6 in total/ })).toBeInTheDocument();
-  expect(screen.getByRole("table", { name: "Website article views by day", hidden: true })).toBeInTheDocument();
+  expect(screen.getByRole("img", { name: /Daily website article views for All articles: 6 recorded in this period/ })).toBeInTheDocument();
+  expect(screen.getByRole("table", { name: /Website article views by day — All articles/, hidden: true })).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Find an article"), { target: { value: "Second" } });
   expect(within(table).queryByRole("link", { name: "First article" })).not.toBeInTheDocument();
   expect(within(table).getByRole("link", { name: "Second article" })).toHaveAttribute("href", "/writing/second-article");
@@ -240,3 +247,126 @@ test.each([
   ["slug,url,wrong\na,https://example.substack.com/p/a,1", /header/],
   ["slug,url,views\n", /at least one/],
 ])("CSV rejects malformed statistics: %s", (input, error) => expect(() => parseWritingStatsCsv(input)).toThrow(error));
+
+test.each([["7d", "2026-11-07", "Showing last 7 days"], ["90d", "2026-08-16", "Showing last 90 days"], ["all", "2026-11-01", "Showing all recorded time"]])("applying %s keeps website period counts separate from lifetime totals", async (range, from, label) => {
+  mount(); await loaded();
+  fetch.mockResolvedValueOnce(response(periodSnapshot({ range, from, totalWebsiteViews: 10, selectedArticleViews: 10 }, [2, 8])));
+  fireEvent.change(screen.getByLabelText("Date range"), { target: { value: range } });
+  expect(fetch).toHaveBeenCalledTimes(1);
+  fireEvent.submit(screen.getByRole("form", { name: "Choose website report period" }));
+  expect(await screen.findByText(label)).toBeInTheDocument();
+  expect(fetch.mock.calls[1][0]).toBe(`/api/private/writing-dashboard?range=${range}`);
+  const rows = within(screen.getByRole("region", { name: "Website views in selected period" })).getAllByRole("row");
+  expect(rows[1]).toHaveTextContent("Second article8"); expect(rows[2]).toHaveTextContent("First article2");
+  const lifetime = screen.getByRole("region", { name: "Lifetime and reported platform totals" });
+  expect(within(lifetime).getByText("Reported views (available sources)").parentElement).toHaveTextContent("42");
+  expect(within(lifetime).getByText("Website article views").parentElement).toHaveTextContent("12");
+  expect(within(lifetime).getByText("Website article likes").parentElement).toHaveTextContent("3");
+});
+
+test.each([["", "2026-11-13", /valid start and end dates/], ["2026-11-13", "2026-11-12", /start date must be on or before/], ["2026-11-13", "2026-11-14", /on or before Nov 13, 2026 in Toronto/], ["2010-01-01", "2026-11-13", /at most 3,660 days/]])("invalid custom period %s to %s never requests or relabels statistics", async (from, to, message) => {
+  mount(); await loaded();
+  fireEvent.change(screen.getByLabelText("Date range"), { target: { value: "custom" } });
+  fireEvent.change(screen.getByLabelText("Start date"), { target: { value: from } });
+  fireEvent.change(screen.getByLabelText("End date"), { target: { value: to } });
+  fireEvent.submit(screen.getByRole("form", { name: "Choose website report period" }));
+  expect(screen.getByRole("alert")).toHaveTextContent(message);
+  expect(fetch).toHaveBeenCalledTimes(1); expect(screen.getByText("Showing last 30 days")).toBeInTheDocument();
+});
+
+test("custom one-day periods and chart selection persist through refresh and import", async () => {
+  mount(); await loaded();
+  const custom = periodSnapshot({ range: "custom", from: "2026-11-12", to: "2026-11-12", includesToday: false, includesUnrecordedDays: false, totalWebsiteViews: 2, selectedArticleViews: 2, daily: [{ day: "2026-11-12", views: 2 }] }, [2, 0]);
+  fetch.mockResolvedValueOnce(response(custom));
+  fireEvent.change(screen.getByLabelText("Date range"), { target: { value: "custom" } });
+  fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-11-12" } });
+  fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-11-12" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Choose website report period" }));
+  await screen.findByText("Showing custom dates");
+  expect(fetch.mock.calls[1][0]).toBe("/api/private/writing-dashboard?range=custom&from=2026-11-12&to=2026-11-12");
+  expect(screen.queryByText(/Today .* is a partial day/)).not.toBeInTheDocument();
+  custom.period.selectedArticle = "first-article";
+  fetch.mockResolvedValue(response(custom));
+  fireEvent.change(screen.getByLabelText("Article for daily chart"), { target: { value: "first-article" } });
+  await waitFor(() => expect(screen.getByLabelText("Article for daily chart")).toBeEnabled());
+  const url = "/api/private/writing-dashboard?range=custom&from=2026-11-12&to=2026-11-12&article=first-article";
+  expect(fetch.mock.calls[2][0]).toBe(url);
+  fireEvent.click(screen.getByRole("button", { name: "Refresh dashboard" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Refresh dashboard" })).toBeEnabled());
+  expect(fetch.mock.calls[3][0]).toBe(url);
+  fetch.mockResolvedValueOnce(response({ ok: true, imported: 2, platform: "devto" }));
+  fireEvent.submit(screen.getByRole("form", { name: "Import DEV.to statistics" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Import DEV.to views" })).toBeEnabled());
+  expect(fetch.mock.calls[fetch.mock.calls.length - 1][0]).toBe(url);
+  expect(screen.getByText("Showing custom dates")).toBeInTheDocument();
+  expect(screen.getByLabelText("Article for daily chart")).toHaveValue("first-article");
+});
+
+test("article selection changes the series without filtering the table or period total", async () => {
+  mount(); await loaded();
+  fetch.mockResolvedValueOnce(response(periodSnapshot({ selectedArticle: "second-article", selectedArticleViews: 1, daily: [{ day: "2026-11-12", views: 0 }, { day: "2026-11-13", views: 1 }] })));
+  fireEvent.change(screen.getByLabelText("Article for daily chart"), { target: { value: "second-article" } });
+  expect(await screen.findByRole("img", { name: /Daily website article views for Second article: 1 recorded/ })).toBeInTheDocument();
+  expect(fetch.mock.calls[1][0]).toBe("/api/private/writing-dashboard?range=30d&article=second-article");
+  expect(screen.getByText("Recorded website views in this period").parentElement).toHaveTextContent("6");
+  const table = screen.getByRole("region", { name: "Website views in selected period" });
+  expect(within(table).getByRole("link", { name: "First article" })).toBeInTheDocument();
+  expect(within(table).getByRole("link", { name: "Second article" })).toBeInTheDocument();
+  expect(within(table).getAllByRole("row")[1]).toHaveTextContent("5");
+});
+
+test("pretracking dates are unavailable and today is partial", async () => {
+  mount(); await loaded();
+  const rows = within(screen.getByRole("table", { name: /Website article views by day/, hidden: true })).getAllByRole("row", { hidden: true });
+  expect(rows[1]).toHaveTextContent("Oct 15, 2026UnavailableBefore tracking began");
+  expect(rows[3]).toHaveTextContent("Today · partial day");
+  expect(screen.getByText(/Tracking started Nov 1, 2026/)).toHaveTextContent("unavailable, not zero");
+});
+
+test("entirely unrecorded periods never present zero views", async () => {
+  fetch.mockResolvedValueOnce(response(periodSnapshot({ range: "custom", from: "2026-10-10", to: "2026-10-10", includesToday: false, totalWebsiteViews: 0, selectedArticleViews: 0, daily: [{ day: "2026-10-10", views: null }] }, [0, 0])));
+  mount(); await loaded();
+  expect(screen.getByText("Recorded website views in this period").parentElement).toHaveTextContent("Not available");
+  const table = screen.getByRole("region", { name: "Website views in selected period" });
+  expect(within(table).getAllByText("Not available")).toHaveLength(2); expect(within(table).queryByText("0")).not.toBeInTheDocument();
+});
+
+test.each(["success", "expired auth"])("a stale %s response cannot replace a newer period", async staleResult => {
+  mount(); await loaded();
+  let oldResponse, newResponse;
+  fetch.mockImplementationOnce(() => new Promise(resolve => { oldResponse = resolve; }));
+  fetch.mockImplementationOnce(() => new Promise(resolve => { newResponse = resolve; }));
+  fireEvent.change(screen.getByLabelText("Date range"), { target: { value: "7d" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Choose website report period" }));
+  expect(screen.getByText("Showing last 30 days")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Date range"), { target: { value: "90d" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Choose website report period" }));
+  await act(async () => newResponse(response(periodSnapshot({ range: "90d", from: "2026-08-16" }))));
+  expect(screen.getByText("Showing last 90 days")).toBeInTheDocument();
+  await act(async () => oldResponse(staleResult === "success" ? response(periodSnapshot({ range: "7d", from: "2026-11-07" })) : response({ error: "Expired" }, 401)));
+  expect(screen.getByText("Showing last 90 days")).toBeInTheDocument();
+  expect(screen.queryByText("Showing last 7 days")).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Sign in with ChatGPT" })).not.toBeInTheDocument();
+});
+
+test("failed period requests preserve displayed labels and refresh the last applied filter", async () => {
+  mount(); await loaded();
+  fetch.mockRejectedValueOnce(new Error("Offline"));
+  fireEvent.change(screen.getByLabelText("Date range"), { target: { value: "7d" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Choose website report period" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("last successfully loaded date range");
+  expect(screen.getByText("Showing last 30 days")).toBeInTheDocument();
+  expect(screen.queryByText("Showing last 7 days")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh dashboard" }));
+  await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  expect(fetch.mock.calls[fetch.mock.calls.length - 1][0]).toBe("/api/private/writing-dashboard?range=30d");
+});
+
+test("long charts stay bounded and preserve all recorded views and unavailable days", () => {
+  const days = Array.from({ length: 3660 }, (_, index) => ({ day: new Date(Date.UTC(2016, 0, 1 + index)).toISOString().slice(0, 10), views: index < 200 ? null : 2 }));
+  const { buckets, size } = periodChartBuckets(days);
+  expect(buckets.length).toBeLessThanOrEqual(60); expect(size).toBeGreaterThan(1); expect(buckets[0].views).toBeNull();
+  expect(buckets.reduce((sum, bucket) => sum + (bucket.views || 0), 0)).toBe(6920);
+  expect(buckets.reduce((sum, bucket) => sum + bucket.unavailableDays, 0)).toBe(200);
+  expect(buckets[buckets.length - 1].to).toBe(days[days.length - 1].day);
+});

@@ -40,6 +40,13 @@ const writes = bucket => bucket.calls.filter(([kind]) => kind === 'put');
 const response = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
 const remoteArticle = article => ({ id: article.id, slug: article.slug, user: { username: 'dessygil' }, url: article.sourceUrl, page_views_count: 42 });
 const largePage = () => [remoteArticle(first), ...Array.from({ length: 99 }, (_, index) => ({ id: 900000 + index, slug: `unimported-${index}`, user: { username: 'dessygil' }, url: `https://dev.to/dessygil/unimported-${index}`, page_views_count: 10 }))];
+function seedDay(bucket, day, firstViews = 0, secondViews = 0, extraPaths = {}) {
+  bucket.seed(`analytics/${day}.json`, { version: 1, day, paths: { [`/writing/${first.slug}`]: { pageview: firstViews }, [`/writing/${second.slug}`]: { pageview: secondViews }, ...extraPaths } });
+}
+async function readDashboard(bucket, query = '') {
+  const result = await handleWritingDashboard(request(endpoint + query), env(bucket));
+  assert.equal(result.status, 200); return result.json();
+}
 
 test('all private operations authorize before any storage or upstream access', async t => {
   const bucket = seeded(); let fetched = false; t.mock.method(globalThis, 'fetch', async () => { fetched = true; throw new Error('unexpected'); });
@@ -75,6 +82,8 @@ test('dashboard separates recorded lifetime from 30-day trend and missing extern
   assert.equal(value.articles[1].devto, null); assert.equal(value.articles[1].medium, null);
   assert.deepEqual(value.totals, { websiteViews: 12, likes: 2, devtoViews: 100, substackViews: 50, mediumViews: null, reportedViews: 162 });
   assert.equal(value.daily.length, 30); assert.equal(value.daily.reduce((sum, day) => sum + day.views, 0), 5);
+  assert.deepEqual(value.articles.map(article => article.periodWebsiteViews), [3, 2]);
+  assert.deepEqual(value.period, { range: '30d', from: '2026-10-15', to: '2026-11-13', today: '2026-11-13', timeZone: 'America/Toronto', websiteSince: '2026-09-01', includesUnrecordedDays: false, includesToday: true, totalWebsiteViews: 5, selectedArticle: null, selectedArticleViews: 5, daily: value.daily });
   assert.equal(value.coverage.websiteSince, '2026-09-01'); assert.equal(value.coverage.unassignedWebsiteViews, 4);
   assert.deepEqual(value.coverage.platforms.devto, { reportedArticles: 1, totalArticles: 2, earliestAsOf: asOf, latestAsOf: asOf });
   assert.equal(JSON.stringify(value).includes('voters'), false); assert.equal(JSON.stringify(value).includes('bodyHtml'), false);
@@ -86,6 +95,109 @@ test('runtime archive supplies newly imported articles; empty analytics has unkn
   const result = await handleWritingDashboard(request(), env(bucket)), value = await result.json();
   assert.equal(result.status, 200); assert.equal(value.articles[0].slug, fresh.slug); assert.equal(value.coverage.websiteSince, null); assert.equal(value.totals.devtoViews, null);
   const fallbackResult = await (await handleWritingDashboard(request(), env(new Bucket()))).json(); assert.equal(fallbackResult.articles.length, fallback.length);
+});
+
+test('rolling and inclusive custom ranges retain per-article counts while selection changes only the chart', async t => {
+  t.mock.method(Date, 'now', () => now); const bucket = seeded(); bucket.pageSize = 2;
+  seedDay(bucket, '2026-09-01', 100, 200);
+  seedDay(bucket, '2026-11-06', 10, 20);
+  seedDay(bucket, '2026-11-07', 1, 2);
+  seedDay(bucket, '2026-11-09', 0, 0, { '/': { pageview: 999 }, '(other)': { pageview: 10 } });
+  seedDay(bucket, '2026-11-10', 3, 5);
+  seedDay(bucket, '2026-11-13', 7, 11);
+  const baseline = await readDashboard(bucket);
+  for (const [range, from, expected, length] of [['7d', '2026-11-07', [11, 18], 7], ['30d', '2026-10-15', [21, 38], 30], ['90d', '2026-08-16', [121, 238], 90], ['all', '2026-09-01', [121, 238], 74]]) {
+    const result = await readDashboard(bucket, `?range=${range}`);
+    assert.equal(result.period.from, from); assert.equal(result.period.to, '2026-11-13'); assert.equal(result.period.daily.length, length);
+    assert.deepEqual(result.articles.map(article => article.periodWebsiteViews), expected);
+    assert.equal(result.period.totalWebsiteViews, expected[0] + expected[1]); assert.equal(result.period.selectedArticleViews, result.period.totalWebsiteViews);
+    assert.deepEqual(result.totals, baseline.totals); assert.deepEqual(result.daily, baseline.daily);
+  }
+  const query = '?range=custom&from=2026-11-07&to=2026-11-10', allArticles = await readDashboard(bucket, query);
+  bucket.calls = [];
+  const selected = await readDashboard(bucket, `${query}&article=${second.slug}`);
+  assert.deepEqual(selected.articles.map(article => article.periodWebsiteViews), [4, 7]);
+  assert.equal(selected.period.totalWebsiteViews, 11); assert.equal(selected.period.selectedArticleViews, 7); assert.equal(selected.period.selectedArticle, second.slug);
+  assert.deepEqual(selected.period.daily, [{ day: '2026-11-07', views: 2 }, { day: '2026-11-08', views: 0 }, { day: '2026-11-09', views: 0 }, { day: '2026-11-10', views: 5 }]);
+  assert.deepEqual(selected.articles, allArticles.articles); assert.deepEqual(selected.totals, baseline.totals); assert.deepEqual(selected.daily, baseline.daily); assert.deepEqual(selected.coverage, baseline.coverage);
+  assert.equal(selected.period.includesToday, false);
+  assert.equal(bucket.calls.filter(([kind, key]) => kind === 'get' && key.startsWith('analytics/')).length, 6, 'selected chart reuses the lifetime scan');
+  const single = await readDashboard(bucket, '?range=custom&from=2026-11-13&to=2026-11-13');
+  assert.deepEqual(single.period.daily, [{ day: '2026-11-13', views: 18 }]); assert.equal(single.period.includesToday, true);
+});
+
+test('period coverage distinguishes precollection, homepage-only start, gaps, and empty history', async t => {
+  t.mock.method(Date, 'now', () => now); const bucket = seeded();
+  bucket.seed('analytics/2026-11-10.json', { version: 1, day: '2026-11-10', paths: { '/': { pageview: 99 } } });
+  seedDay(bucket, '2026-11-12', 4);
+  const mixed = await readDashboard(bucket, '?range=custom&from=2026-11-08&to=2026-11-12');
+  assert.equal(mixed.period.websiteSince, '2026-11-10'); assert.equal(mixed.period.includesUnrecordedDays, true);
+  assert.deepEqual(mixed.period.daily.map(day => day.views), [null, null, 0, 0, 4]); assert.equal(mixed.period.totalWebsiteViews, 4);
+  const before = await readDashboard(bucket, '?range=custom&from=2026-11-08&to=2026-11-09');
+  assert.deepEqual(before.period.daily.map(day => day.views), [null, null]); assert.equal(before.period.includesUnrecordedDays, true);
+  assert.equal(before.period.totalWebsiteViews, 0); assert.equal(before.period.selectedArticleViews, 0); assert.deepEqual(before.articles.map(article => article.periodWebsiteViews), [0, 0]);
+  const all = await readDashboard(bucket, '?range=all');
+  assert.equal(all.period.from, '2026-11-10'); assert.equal(all.period.includesUnrecordedDays, false); assert.deepEqual(all.period.daily.map(day => day.views), [0, 0, 4, 0]);
+  const empty = seeded(), recent = await readDashboard(empty, `?range=7d&article=${first.slug}`);
+  assert.equal(recent.period.websiteSince, null); assert.equal(recent.period.includesUnrecordedDays, true); assert.equal(recent.period.selectedArticleViews, 0);
+  assert.deepEqual(recent.period.daily.map(day => day.views), Array(7).fill(null)); assert.ok(recent.daily.every(day => day.views === 0), 'legacy summary remains backward compatible');
+  const emptyAll = await readDashboard(empty, '?range=all');
+  assert.equal(emptyAll.period.from, '2026-11-13'); assert.deepEqual(emptyAll.period.daily, [{ day: '2026-11-13', views: null }]);
+});
+
+test('Toronto today is captured once across midnight and UTC dates cannot select future local days', async t => {
+  const beforeMidnight = Date.parse('2026-11-14T04:59:59.999Z'), afterMidnight = beforeMidnight + 1;
+  let calls = 0; t.mock.method(Date, 'now', () => calls++ === 0 ? beforeMidnight : afterMidnight);
+  const bucket = seeded(); seedDay(bucket, '2026-11-13', 2);
+  const before = await readDashboard(bucket, '?range=7d');
+  assert.equal(calls, 1); assert.equal(before.period.today, '2026-11-13'); assert.equal(before.period.to, '2026-11-13'); assert.equal(before.daily.at(-1).day, '2026-11-13'); assert.equal(before.coverage.generatedAt, '2026-11-14T04:59:59.999Z');
+  const after = await readDashboard(bucket, '?range=7d');
+  assert.equal(after.period.today, '2026-11-14'); assert.equal(after.period.from, '2026-11-08'); assert.equal(after.period.daily.at(-1).views, 0);
+  calls = 0; bucket.calls = [];
+  const future = await handleWritingDashboard(request(endpoint + '?range=custom&from=2026-11-14&to=2026-11-14'), env(bucket));
+  assert.equal(future.status, 400); assert.deepEqual(bucket.calls, []);
+});
+
+test('Toronto spring and fall daylight-saving changes retain every inclusive calendar day', async t => {
+  let currentTime = now; t.mock.method(Date, 'now', () => currentTime);
+  for (const [instant, dates] of [['2026-03-10T03:30:00Z', ['2026-03-07', '2026-03-08', '2026-03-09']], ['2026-11-03T04:30:00Z', ['2026-10-31', '2026-11-01', '2026-11-02']]]) {
+    currentTime = Date.parse(instant); const bucket = seeded();
+    dates.forEach((day, index) => seedDay(bucket, day, index + 1));
+    const result = await readDashboard(bucket, `?range=custom&from=${dates[0]}&to=${dates[2]}`);
+    assert.equal(result.period.today, dates[2]); assert.equal(result.period.includesToday, true);
+    assert.deepEqual(result.period.daily, dates.map((day, index) => ({ day, views: index + 1 })));
+    assert.equal(result.period.totalWebsiteViews, 6);
+    const week = await readDashboard(bucket, '?range=7d'); assert.equal(week.period.daily.length, 7); assert.equal(week.period.daily.at(-1).day, dates[2]);
+  }
+});
+
+test('private range validation rejects malformed parameters before storage and unknown articles before analytics', async t => {
+  t.mock.method(Date, 'now', () => now); const bucket = seeded();
+  const invalid = ['?range=', '?range=year', '?range=7d&range=30d', '?range=7d&%72ange=7d', '?unknown=1', '?from=2026-11-01', '?range=all&to=2026-11-13', '?article=', '?article=Bad%20Slug', `?article=${first.slug}&article=${first.slug}`, '?range=custom', '?range=custom&from=2026-11-01', '?range=custom&from=2026-11-13&to=2026-11-12', '?range=custom&from=2026-02-29&to=2026-03-01', '?range=custom&from=2026-13-01&to=2026-13-02', '?range=custom&from=2026-1-01&to=2026-11-13', '?range=custom&from=2026-11-01T00:00:00Z&to=2026-11-13', '?range=custom&from=2026-11-14&to=2026-11-14', '?range=custom&from=2026-11-01&from=2026-11-02&to=2026-11-13', '?range=custom&from=2026-11-01&to=2026-11-13&to=2026-11-13'];
+  for (const query of [...invalid, '?article=unknown-article']) {
+    assert.equal((await handleWritingDashboard(request(endpoint + query, undefined, { auth: null }), env(bucket))).status, 401);
+    assert.equal((await handleWritingDashboard(request(endpoint + query, undefined, { headers: { 'oai-authenticated-user-email': 'other@example.test' } }), env(bucket))).status, 403);
+  }
+  assert.deepEqual(bucket.calls, []);
+  for (const query of invalid) {
+    const result = await handleWritingDashboard(request(endpoint + query), env(bucket));
+    assert.equal(result.status, 400, query); assert.match(result.headers.get('Cache-Control'), /no-store/); assert.equal(result.headers.get('X-Robots-Tag'), 'noindex, nofollow');
+  }
+  assert.deepEqual(bucket.calls, []);
+  assert.equal((await handleWritingDashboard(request(endpoint + '?article=unknown-article'), env(bucket))).status, 400);
+  assert.deepEqual(bucket.calls, [['get', 'writing/archive-v1.json']]);
+});
+
+test('custom day limits are inclusive and sparse all-history series cannot allocate unbounded dates', async t => {
+  t.mock.method(Date, 'now', () => now); const bucket = seeded(), end = Date.parse('2026-11-13T00:00:00Z');
+  const from = offset => new Date(end - offset * 86_400_000).toISOString().slice(0, 10);
+  const maximum = await readDashboard(bucket, `?range=custom&from=${from(3659)}&to=2026-11-13`);
+  assert.equal(maximum.period.daily.length, 3660);
+  bucket.calls = [];
+  assert.equal((await handleWritingDashboard(request(`${endpoint}?range=custom&from=${from(3660)}&to=2026-11-13`), env(bucket))).status, 400); assert.deepEqual(bucket.calls, []);
+  seedDay(bucket, '2010-01-01', 5);
+  const recent = await readDashboard(bucket); assert.equal(recent.totals.websiteViews, 5); assert.equal(recent.period.totalWebsiteViews, 0);
+  const unbounded = await handleWritingDashboard(request(endpoint + '?range=all'), env(bucket)); assert.equal(unbounded.status, 503); assert.match((await unbounded.json()).error, /archive rollup/);
 });
 
 test('manual imports validate the complete batch, dates, source hosts and integer counts before writing', async t => {

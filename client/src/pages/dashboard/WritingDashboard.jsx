@@ -111,17 +111,50 @@ function ExternalViews({ source, platform }) {
   return <><strong>{count(source.views)}</strong><small>As of {dateLabel(source.asOf, "UTC")}</small>{url && <a href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open article on ${PLATFORM_LABELS[platform]}`}>Source ↗</a>}</>;
 }
 
-function DailyViews({ daily }) {
-  const maximum = Math.max(1, ...daily.map(day => validCount(day.views) ? day.views : 0));
-  const sum = daily.reduce((total, day) => total + (validCount(day.views) ? day.views : 0), 0);
+const RANGE_LABELS = { "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", all: "All recorded time", custom: "Custom dates" };
+const DEFAULT_FILTERS = { range: "30d", article: "" };
+const periodDates = period => `${dateLabel(period.from)} – ${dateLabel(period.to)}`;
+const hasRecordedDays = period => period.daily.some(day => validCount(day.views));
+
+function reportUrl(filters) {
+  const params = new URLSearchParams({ range: filters.range });
+  if (filters.range === "custom") { params.set("from", filters.from); params.set("to", filters.to); }
+  if (filters.article) params.set("article", filters.article);
+  return `/api/private/writing-dashboard?${params}`;
+}
+
+function filtersFromPeriod(period) {
+  return { range: period.range, ...(period.range === "custom" ? { from: period.from, to: period.to } : {}), article: period.selectedArticle || "" };
+}
+
+export function periodChartBuckets(daily) {
+  const size = Math.max(1, Math.ceil(daily.length / 60));
+  const buckets = [];
+  for (let index = 0; index < daily.length; index += size) {
+    const days = daily.slice(index, index + size);
+    const recorded = days.filter(day => validCount(day.views));
+    buckets.push({ from: days[0].day, to: days[days.length - 1].day, views: recorded.length ? recorded.reduce((sum, day) => sum + day.views, 0) : null, unavailableDays: days.length - recorded.length });
+  }
+  return { size, buckets };
+}
+
+function DailyViews({ period, articles, chartArticle, onArticleChange, disabled }) {
+  const { size, buckets } = periodChartBuckets(period.daily);
+  const maximum = Math.max(1, ...buckets.map(bucket => bucket.views || 0));
+  const selected = articles.find(article => article.slug === period.selectedArticle);
+  const available = hasRecordedDays(period);
+  const scope = selected ? selected.title : "All articles";
   return <section className="dashboard-panel" aria-labelledby="daily-views-heading">
-    <div className="dashboard-section-heading"><div><p className="eyebrow">WEBSITE ONLY</p><h2 id="daily-views-heading">The last 30 days</h2></div><p>{count(sum)} recorded article views</p></div>
-    <p className="dashboard-note">Daily article views on this website, in Toronto time. External platform snapshots are not included in this trend.</p>
-    {daily.length ? <><div className="dashboard-chart" role="img" aria-label={`Daily website article views: ${count(sum)} in total. Exact values are available in the daily numbers table below.`}>
-      <div className="dashboard-bars" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${daily.length}, minmax(0, 1fr))` }}>
-        {daily.map(day => <div className="dashboard-bar-track" key={day.day} title={`${dateLabel(day.day)}: ${count(day.views)} views`}><span className={day.views ? "dashboard-bar" : "dashboard-bar is-zero"} style={{ height: `${Math.max(1, (day.views || 0) / maximum * 100)}%` }} /></div>)}
-      </div><div className="dashboard-chart-axis" aria-hidden="true"><span>{dateLabel(daily[0].day)}</span><span>{dateLabel(daily[daily.length - 1].day)}</span></div>
-    </div><details className="dashboard-daily-details"><summary>View daily numbers</summary><div className="dashboard-table-scroll"><table className="dashboard-table"><caption>Website article views by day</caption><thead><tr><th scope="col">Date (Toronto)</th><th scope="col">Views</th></tr></thead><tbody>{daily.map(day => <tr key={day.day}><th scope="row">{dateLabel(day.day)}</th><td>{count(day.views)}</td></tr>)}</tbody></table></div></details></> : <p>No daily article views have been recorded yet.</p>}
+    <div className="dashboard-section-heading"><div><p className="eyebrow">SELECTED PERIOD / WEBSITE ONLY</p><h2 id="daily-views-heading">Daily website views</h2></div><p>{available ? `${count(period.selectedArticleViews)} recorded article views` : "No recorded data in this period"}</p></div>
+    <label className="dashboard-chart-selector">Article for daily chart<select value={chartArticle} onChange={event => onArticleChange(event.target.value)} disabled={disabled}><option value="">All articles</option>{articles.map(article => <option key={article.slug} value={article.slug}>{article.title}</option>)}</select></label>
+    <p className="dashboard-chart-scope"><strong>{scope}</strong> · {periodDates(period)}</p>
+    <p className="dashboard-note">The article selector changes this chart only. The article table and period total still cover all articles. Dates use Toronto time; external platform snapshots are not included.</p>
+    {buckets.length ? <><div className="dashboard-chart" role="img" aria-label={`${size > 1 ? "Grouped" : "Daily"} website article views for ${scope}: ${available ? `${count(period.selectedArticleViews)} recorded in this period` : "no recorded data in this period"}. Exact values are available in the daily numbers table below.`}>
+      <div className="dashboard-bars" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${buckets.length}, minmax(0, 1fr))` }}>
+        {buckets.map(bucket => <div className="dashboard-bar-track" key={bucket.from} title={`${dateLabel(bucket.from)}${bucket.to !== bucket.from ? `–${dateLabel(bucket.to)}` : ""}: ${bucket.views === null ? "Unavailable" : `${count(bucket.views)} recorded views`}${bucket.unavailableDays ? `; ${bucket.unavailableDays} unavailable ${bucket.unavailableDays === 1 ? "day" : "days"}` : ""}`}><span className={`dashboard-bar${bucket.views === null ? " is-unavailable" : bucket.views === 0 ? " is-zero" : ""}${bucket.views !== null && bucket.unavailableDays ? " has-unavailable-days" : ""}`} style={{ height: `${bucket.views === null ? 100 : Math.max(1, bucket.views / maximum * 100)}%` }} /></div>)}
+      </div><div className="dashboard-chart-axis" aria-hidden="true"><span>{dateLabel(period.from)}</span><span>{dateLabel(period.to)}</span></div>
+    </div>{size > 1 && <p className="dashboard-note">Bars group up to {size} consecutive days to keep this longer period readable. The table below contains every date.</p>}{period.includesUnrecordedDays && <p className="dashboard-note">Striped bars include dates before tracking began. Unavailable dates are not treated as zero.</p>}
+    <details className="dashboard-daily-details"><summary>View exact daily numbers</summary><div className="dashboard-table-scroll"><table className="dashboard-table"><caption>Website article views by day — {scope} — {periodDates(period)}</caption><thead><tr><th scope="col">Date (Toronto)</th><th scope="col">Views</th><th scope="col">Coverage</th></tr></thead><tbody>{period.daily.map(day => <tr key={day.day}><th scope="row">{dateLabel(day.day)}</th><td>{day.views === null ? "Unavailable" : count(day.views)}</td><td>{day.views === null ? (period.websiteSince ? "Before tracking began" : "No recorded history") : day.day === period.today ? "Today · partial day" : "Recorded"}</td></tr>)}</tbody></table></div></details></> : <p>No dates are available for this period.</p>}
   </section>;
 }
 
@@ -133,6 +166,13 @@ export default function WritingDashboard() {
   const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("totalViews");
+  const [rangeDraft, setRangeDraft] = useState("30d");
+  const [fromDraft, setFromDraft] = useState("");
+  const [toDraft, setToDraft] = useState("");
+  const [rangeError, setRangeError] = useState("");
+  const [chartArticle, setChartArticle] = useState("");
+  const [periodQuery, setPeriodQuery] = useState("");
+  const [periodSort, setPeriodSort] = useState("periodWebsiteViews");
   const [apiKey, setApiKey] = useState("");
   const [devtoStatus, setDevtoStatus] = useState(null);
   const [manualStatus, setManualStatus] = useState(null);
@@ -149,6 +189,9 @@ export default function WritingDashboard() {
   const busy = useRef(false);
   const apiInput = useRef(null);
   const latestLoad = useRef(0);
+  const appliedFilters = useRef(DEFAULT_FILTERS);
+  const lastAttempt = useRef(DEFAULT_FILTERS);
+  const hasLoadedData = useRef(false);
 
   const request = useCallback(async (url, payload) => {
     const controller = new AbortController();
@@ -172,20 +215,33 @@ export default function WritingDashboard() {
 
   const handleAccessError = useCallback(error => {
     if (error.status !== 401 && error.status !== 403) return false;
-    if (mounted.current) { setData(null); setApiKey(""); setAccess(error.status === 401 ? "signin" : "forbidden"); }
+    if (mounted.current) { hasLoadedData.current = false; setData(null); setApiKey(""); setAccess(error.status === 401 ? "signin" : "forbidden"); }
     return true;
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (filters = appliedFilters.current) => {
     if (!mounted.current) return;
     const requestId = ++latestLoad.current;
+    lastAttempt.current = { ...filters };
     setLoading(true); setLoadError("");
     try {
-      const result = await request("/api/private/writing-dashboard");
-      if (!Array.isArray(result.articles) || !Array.isArray(result.daily) || !result.totals || !result.coverage) throw new Error("The dashboard response was incomplete.");
-      if (mounted.current && requestId === latestLoad.current) { setData(result); setAccess("owner"); setLoadError(""); }
+      const result = await request(reportUrl(filters));
+      const period = result.period;
+      if (!Array.isArray(result.articles) || !Array.isArray(result.daily) || !result.totals || !result.coverage ||
+          !period || !Object.prototype.hasOwnProperty.call(RANGE_LABELS, period.range) || !validDate(period.from) || !validDate(period.to) || !validDate(period.today) ||
+          !Array.isArray(period.daily) || !period.daily.every(day => validDate(day.day) && (day.views === null || validCount(day.views))) ||
+          !validCount(period.totalWebsiteViews) || !validCount(period.selectedArticleViews) || !result.articles.every(article => validCount(article.periodWebsiteViews))) throw new Error("The dashboard response was incomplete.");
+      if (mounted.current && requestId === latestLoad.current) {
+        appliedFilters.current = filtersFromPeriod(period);
+        hasLoadedData.current = true;
+        setData(result); setAccess("owner"); setLoadError(""); setChartArticle(period.selectedArticle || "");
+      }
     } catch (error) {
-      if (mounted.current && requestId === latestLoad.current && !handleAccessError(error)) { setLoadError("The dashboard could not be loaded. Please try again."); setAccess(current => current === "loading" ? "error" : current); }
+      if (mounted.current && requestId === latestLoad.current && !handleAccessError(error)) {
+        setLoadError(`The dashboard could not be loaded. ${hasLoadedData.current ? "The report below still shows its last successfully loaded date range." : "Please try again."}`);
+        setChartArticle(appliedFilters.current.article);
+        setAccess(current => current === "loading" ? "error" : current);
+      }
     } finally { if (mounted.current && requestId === latestLoad.current) setLoading(false); }
   }, [request, handleAccessError]);
 
@@ -204,6 +260,37 @@ export default function WritingDashboard() {
     const filtered = (data?.articles || []).filter(article => `${article.title} ${article.slug}`.toLowerCase().includes(query.trim().toLowerCase()));
     return filtered.sort((a, b) => sort === "title" ? a.title.localeCompare(b.title) : (b[sort] || 0) - (a[sort] || 0) || a.title.localeCompare(b.title));
   }, [data, query, sort]);
+
+  const periodArticles = useMemo(() => {
+    const filtered = (data?.articles || []).filter(article => `${article.title} ${article.slug}`.toLowerCase().includes(periodQuery.trim().toLowerCase()));
+    return filtered.sort((a, b) => periodSort === "title" ? a.title.localeCompare(b.title) : b.periodWebsiteViews - a.periodWebsiteViews || a.title.localeCompare(b.title));
+  }, [data, periodQuery, periodSort]);
+
+  function changeRange(value) {
+    setRangeDraft(value); setRangeError("");
+    if (value === "custom") {
+      if (!fromDraft) setFromDraft(data.period.from);
+      if (!toDraft) setToDraft(data.period.to);
+    }
+  }
+
+  function applyRange(event) {
+    event.preventDefault();
+    if (mutation) return;
+    setRangeError("");
+    if (rangeDraft === "custom") {
+      if (!validDate(fromDraft) || !validDate(toDraft)) { setRangeError("Enter valid start and end dates."); return; }
+      if (fromDraft > toDraft) { setRangeError("The start date must be on or before the end date."); return; }
+      if (toDraft > data.period.today) { setRangeError(`Choose dates on or before ${dateLabel(data.period.today)} in Toronto.`); return; }
+      if ((Date.parse(toDraft) - Date.parse(fromDraft)) / 86400000 + 1 > 3660) { setRangeError("Choose a period of at most 3,660 days, including both the start and end dates."); return; }
+    }
+    load({ range: rangeDraft, ...(rangeDraft === "custom" ? { from: fromDraft, to: toDraft } : {}), article: appliedFilters.current.article });
+  }
+
+  function changeChartArticle(article) {
+    setChartArticle(article);
+    load({ ...appliedFilters.current, article });
+  }
 
   async function importDevto(event) {
     event.preventDefault();
@@ -256,10 +343,30 @@ export default function WritingDashboard() {
     {access === "loading" && <p role="status" className="dashboard-loading">Checking dashboard access…</p>}
     {access === "signin" && <section className="dashboard-panel dashboard-access" aria-labelledby="dashboard-sign-in"><h2 id="dashboard-sign-in">Sign in to view your dashboard.</h2><p>These statistics and import tools are available only to the site owner.</p><a className="primary-link" href={SIGN_IN_URL} target="_top">Sign in with ChatGPT</a></section>}
     {access === "forbidden" && <section className="dashboard-panel dashboard-access" aria-labelledby="dashboard-owner-only"><h2 id="dashboard-owner-only">This dashboard is private.</h2><p>You are signed in, but this account does not have owner access.</p><Link className="text-link" to="/writing">Return to the writing archive →</Link></section>}
-    {loadError && access !== "signin" && access !== "forbidden" && <div className="dashboard-message is-error" role="alert"><p>{loadError}</p><button className="dashboard-secondary" onClick={load} disabled={loading || !!mutation}>Try again</button></div>}
+    {loadError && access !== "signin" && access !== "forbidden" && <div className="dashboard-message is-error" role="alert"><p>{loadError}</p><button className="dashboard-secondary" onClick={() => load(lastAttempt.current)} disabled={loading || !!mutation}>Try again</button></div>}
     {access === "owner" && data && <>
-      <div className="dashboard-toolbar"><p>Refreshed {dateLabel(data.coverage.generatedAt || data.coverage.lastUpdated)} · Toronto time</p><button className="dashboard-secondary" onClick={load} disabled={loading || !!mutation}>{loading ? "Refreshing…" : "Refresh dashboard"}</button></div>
+      <div className="dashboard-toolbar"><p>Refreshed {dateLabel(data.coverage.generatedAt || data.coverage.lastUpdated)} · Toronto time</p><button className="dashboard-secondary" onClick={() => load()} disabled={loading || !!mutation}>{loading ? "Refreshing…" : "Refresh dashboard"}</button></div>
       {data.coverage.analyticsEnabled === false && <p className="dashboard-message" role="status">Website view collection is currently paused. Previously recorded views and reported platform snapshots are shown below.</p>}
+      <section className="dashboard-panel dashboard-period-report" aria-labelledby="period-report-heading">
+        <p className="eyebrow">DATE RANGE / WEBSITE ONLY</p><h2 id="period-report-heading">Website views</h2>
+        <p>Choose a period to see views recorded on this website. Both the start and end date are included, in Toronto time.</p>
+        <form className="dashboard-range-form" onSubmit={applyRange} aria-label="Choose website report period" noValidate>
+          <label>Date range<select value={rangeDraft} onChange={event => changeRange(event.target.value)} disabled={!!mutation}>{Object.entries(RANGE_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+          {rangeDraft === "custom" && <><label>Start date<input type="date" value={fromDraft} max={data.period.today} onChange={event => { setFromDraft(event.target.value); setRangeError(""); }} disabled={!!mutation} required /></label><label>End date<input type="date" value={toDraft} max={data.period.today} onChange={event => { setToDraft(event.target.value); setRangeError(""); }} disabled={!!mutation} required /></label></>}
+          <button className="primary-link" type="submit" disabled={!!mutation}>Apply date range</button>
+        </form>
+        {rangeError && <p className="dashboard-message is-error" role="alert">{rangeError}</p>}
+        {loading && <p className="dashboard-note" role="status">Loading report… The displayed dates and figures stay together until the new report is ready.</p>}
+        <div className="dashboard-period-summary" aria-label="Selected website period summary"><div><span>Showing {RANGE_LABELS[data.period.range].toLowerCase()}</span><strong>{periodDates(data.period)}</strong><small>Both dates included · Toronto time</small></div><div><span>Recorded website views in this period</span><strong>{hasRecordedDays(data.period) ? count(data.period.totalWebsiteViews) : "Not available"}</strong><small>All articles · repeat visits can count again</small></div></div>
+        <p className="dashboard-note">{data.period.websiteSince ? `Tracking started ${dateLabel(data.period.websiteSince)}.` : "Website tracking has not recorded any days yet."}{data.period.includesUnrecordedDays ? " Dates before tracking began are unavailable, not zero; totals include recorded days only." : ""}{data.period.includesToday ? ` Today (${dateLabel(data.period.today)}) is a partial day.` : ""}</p>
+      </section>
+      <DailyViews period={data.period} articles={data.articles} chartArticle={chartArticle} onArticleChange={changeChartArticle} disabled={loading || !!mutation} />
+      <section className="dashboard-panel" aria-labelledby="period-articles-heading"><div className="dashboard-section-heading"><div><p className="eyebrow">SELECTED PERIOD / ALL ARTICLES</p><h2 id="period-articles-heading">Website views by article</h2></div><p>{periodDates(data.period)}</p></div>
+        <div className="dashboard-filters"><label>Search period report<input type="search" value={periodQuery} onChange={event => setPeriodQuery(event.target.value)} placeholder="Search titles or slugs" /></label><label>Sort website report by<select value={periodSort} onChange={event => setPeriodSort(event.target.value)}><option value="periodWebsiteViews">Views in this period</option><option value="title">Article title</option></select></label></div>
+        <div className="dashboard-table-scroll" role="region" aria-label="Website views in selected period" tabIndex="0"><table className="dashboard-table dashboard-period-table"><caption>Website views by article for {periodDates(data.period)}. All articles are included regardless of the chart selection.</caption><thead><tr><th scope="col">Article</th><th scope="col">Views in this period</th></tr></thead><tbody>{periodArticles.map(article => <tr key={article.slug}><th scope="row"><Link to={`/writing/${article.slug}`}>{article.title}</Link></th><td>{hasRecordedDays(data.period) ? count(article.periodWebsiteViews) : "Not available"}</td></tr>)}</tbody></table></div>
+        {!periodArticles.length && <p className="dashboard-note">{data.articles.length ? "No articles match this search." : "No articles are available yet."}</p>}
+      </section>
+      <section className="dashboard-lifetime-report" aria-labelledby="lifetime-report-heading"><header className="dashboard-report-heading"><p className="eyebrow">SEPARATE REPORT / LIFETIME & PLATFORM SNAPSHOTS</p><h2 id="lifetime-report-heading">Lifetime and reported platform totals</h2><p>The date-range controls above do not filter these figures. Website views and likes cover all recorded history; each external platform uses its latest cumulative snapshot.</p></header>
       <div className="dashboard-summary" aria-label="Writing statistics summary">
         <div className="dashboard-stat"><span>Website article views</span><strong>{count(data.totals.websiteViews)}</strong><small>Since {data.coverage.websiteSince ? dateLabel(data.coverage.websiteSince) : "collection began"}</small></div>
         <div className="dashboard-stat"><span>Reported views (available sources)</span><strong>{count(data.totals.reportedViews)}</strong><small>{PLATFORMS.every(source => data.coverage.platforms?.[source]?.reportedArticles === data.articles.length && data.articles.length > 0) ? "Website + available external snapshots" : "Incomplete coverage · only available sources included"}</small></div>
@@ -274,13 +381,13 @@ export default function WritingDashboard() {
           const value = data.totals[`${source}Views`];
           return <div key={source}><h3>{PLATFORM_LABELS[source]}</h3><strong>{validCount(value) ? `${count(value)} reported views` : "Not added"}</strong>{coverage && <small>{count(coverage.reportedArticles)} of {count(coverage.totalArticles)} articles{coverage.latestAsOf && <> · As of {dateLabel(coverage.earliestAsOf, "UTC")}{coverage.earliestAsOf !== coverage.latestAsOf ? `–${dateLabel(coverage.latestAsOf, "UTC")}` : ""}</>}</small>}</div>;
         })}</div>
-        {data.coverage.unassignedWebsiteViews > 0 && <p className="dashboard-note">{count(data.coverage.unassignedWebsiteViews)} website article views could not be assigned to a current article. They are not included in the per-article table.</p>}
+        {data.coverage.unassignedWebsiteViews > 0 && <p className="dashboard-note">{count(data.coverage.unassignedWebsiteViews)} website views could not be assigned to a current article. They are not included in the per-article table.</p>}
       </section>
-      <DailyViews daily={data.daily} />
       <section className="dashboard-panel" aria-labelledby="article-stats-heading"><div className="dashboard-section-heading"><div><p className="eyebrow">BY ARTICLE</p><h2 id="article-stats-heading">Views across your writing</h2></div></div>
         <div className="dashboard-filters"><label>Find an article<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search titles or slugs" /></label><label>Sort by<select value={sort} onChange={event => setSort(event.target.value)}><option value="totalViews">Reported views</option><option value="websiteViews">Website views</option><option value="likes">Website likes</option><option value="title">Article title</option></select></label></div>
         <div className="dashboard-table-scroll" role="region" aria-label="Per-article writing statistics" tabIndex="0"><table className="dashboard-table dashboard-articles-table"><caption>Recorded website views and latest reported cumulative views from external sources. Total means available reported views, not unique readers.</caption><thead><tr><th scope="col">Article</th><th scope="col">Website</th><th scope="col">DEV.to</th><th scope="col">Substack</th><th scope="col">Medium</th><th scope="col">Reported total</th><th scope="col">Website likes</th></tr></thead><tbody>{shownArticles.map(article => <tr key={article.slug}><th scope="row"><Link to={`/writing/${article.slug}`}>{article.title}</Link><small className="dashboard-article-slug">{article.slug}</small></th><td><strong>{count(article.websiteViews)}</strong></td>{PLATFORMS.map(source => <td key={source}><ExternalViews source={article[source]} platform={source} /></td>)}<td><strong>{count(article.totalViews)}</strong></td><td>{count(article.likes)}</td></tr>)}</tbody></table></div>
         {!shownArticles.length && <p className="dashboard-note">{data.articles.length ? "No articles match this search." : "No articles are available yet."}</p>}
+      </section>
       </section>
       <section className="dashboard-panel" aria-labelledby="devto-import-heading"><p className="eyebrow">OWNER TOOLS</p><h2 id="devto-import-heading">Import DEV.to views</h2><p>Open <a className="text-link" href="https://dev.to/settings/extensions" target="_blank" rel="noopener noreferrer">DEV.to API key settings ↗</a> while signed in as <strong>dessygil</strong>. Copy the generated key value, not its label, and paste it here, never in chat. It is used for this import only and cleared when submitted; this page does not save it.</p><form onSubmit={importDevto} className="dashboard-import-form" aria-label="Import DEV.to statistics"><label htmlFor="dashboard-devto-key">DEV.to API key (if requested)</label><input ref={apiInput} id="dashboard-devto-key" type="password" value={apiKey} onChange={event => setApiKey(event.target.value)} autoComplete="off" spellCheck="false" disabled={!!mutation} aria-describedby="dashboard-devto-key-note" /><p className="dashboard-note" id="dashboard-devto-key-note">If a key is already configured for the site, you can leave this blank. Importing replaces the previous DEV.to snapshot for each matched article.</p><button className="primary-link" type="submit" disabled={!!mutation || loading}>{mutation === "devto" ? "Importing…" : "Import DEV.to views"}</button></form>{devtoStatus && <p className={`dashboard-message ${devtoStatus.type === "error" ? "is-error" : "is-success"}`} role={devtoStatus.type === "error" ? "alert" : "status"}>{devtoStatus.text}</p>}</section>
       <section className="dashboard-panel" aria-labelledby="manual-stats-heading"><p className="eyebrow">OWNER TOOLS</p><h2 id="manual-stats-heading">Add platform view counts</h2><p>Copy the cumulative view count shown by Substack or Medium and record the date. Saving a new snapshot replaces the previous count for that article and platform; it never adds both snapshots together.</p>

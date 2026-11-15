@@ -101,7 +101,24 @@ The combined total is **reported views from available sources**, not unique peop
 Website totals cover records collected by this application; they do not backfill
 old Netlify visits. External columns use latest imported cumulative counts and
 show their observation dates; missing sources remain blank rather than zero.
-The 30-day trend covers website article views only. Substack counts web/email/app
+The date-range report covers website article views only. Choose the last 7, 30,
+or 90 days, all recorded history, or an inclusive custom range. Dates use
+America/Toronto, including daylight-saving changes; today is a partial day.
+The per-article table uses the selected period, and the chart can show all
+articles or one article. Dates before the first saved analytics record are
+unavailable, not zero; later days without events show zero recorded views.
+Lifetime platform totals and helpful marks remain separate from period views.
+
+The private GET `/api/private/writing-dashboard` accepts `range=7d|30d|90d|all|custom`
+(default `30d`), `from` and `to` for a custom range, and an optional known `article`
+slug for the chart. Custom ranges must contain at most 3,660 calendar days and
+cannot end in the future. Existing lifetime response fields and the `daily`
+30-day series remain compatible with scheduled readers; `period` and each
+article's `periodWebsiteViews` supply the new report. No extra visitor identifiers
+or analytics service are needed.
+
+External imports currently retain only the latest cumulative snapshot, so they
+cannot reconstruct historical date ranges. Substack counts web/email/app
 views; Medium uses its own time thresholds and daily deduplication. No automatic
 Substack/Medium sync is implied. The existing DEV.to content sync remains separate
 from owner-only view statistics.

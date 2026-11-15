@@ -59,10 +59,10 @@ async function boundedJson(source, maximum, invalidStatus = 400) {
   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
   catch { throw new Failure(invalidStatus, 'Statistics data is not valid JSON.'); }
 }
-function timestamp(value) {
+function timestamp(value, now) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)?$/.test(value)) throw new Failure(400, 'Use an ISO date or UTC timestamp for asOf.');
   const milliseconds = Date.parse(value);
-  if (!Number.isFinite(milliseconds) || new Date(milliseconds).toISOString().slice(0, value.length === 10 ? 10 : 19) !== value.slice(0, value.length === 10 ? 10 : 19) || milliseconds > Date.now() + 300_000 || milliseconds < Date.parse('2000-01-01')) throw new Failure(400, 'Use a real, nonfuture date for asOf.');
+  if (!Number.isFinite(milliseconds) || new Date(milliseconds).toISOString().slice(0, value.length === 10 ? 10 : 19) !== value.slice(0, value.length === 10 ? 10 : 19) || milliseconds > now + 300_000 || milliseconds < Date.parse('2000-01-01')) throw new Failure(400, 'Use a real, nonfuture date for asOf.');
   return new Date(milliseconds).toISOString();
 }
 function sourceUrl(platform, value, slug) {
@@ -94,40 +94,40 @@ function uniqueUrls(entries) {
     seen.add(entry.url);
   }
 }
-function snapshots(value) {
+function snapshots(value, now) {
   if (value === null) return emptySnapshots();
   if (!object(value) || value.version !== 1 || !object(value.platforms) || !onlyKeys(value.platforms, PLATFORMS)) throw new Error('Invalid stored statistics');
   const result = emptySnapshots();
-  result.updatedAt = value.updatedAt === null ? null : timestamp(value.updatedAt);
+  result.updatedAt = value.updatedAt === null ? null : timestamp(value.updatedAt, now);
   for (const platform of PLATFORMS) {
     const entries = value.platforms[platform] || {};
     if (!object(entries) || Object.keys(entries).length > MAX_ARTICLES) throw new Error('Invalid stored statistics');
     for (const [slug, row] of Object.entries(entries)) {
       if (!validSlug(slug) || !object(row) || !count(row.views)) throw new Error('Invalid stored statistics');
-      result.platforms[platform][slug] = { views: row.views, asOf: timestamp(row.asOf), url: sourceUrl(platform, row.url, slug) };
+      result.platforms[platform][slug] = { views: row.views, asOf: timestamp(row.asOf, now), url: sourceUrl(platform, row.url, slug) };
     }
     uniqueUrls(result.platforms[platform]);
   }
   return result;
 }
-async function savedSnapshots(bucket) {
+async function savedSnapshots(bucket, now) {
   const current = await bucket.get(SNAPSHOT_KEY);
   if (current?.size > SNAPSHOT_LIMIT) throw new Error('Stored statistics too large');
-  try { return { current, value: snapshots(current ? await current.json() : null) }; }
+  try { return { current, value: snapshots(current ? await current.json() : null, now) }; }
   catch { throw new Error('Invalid stored statistics'); }
 }
-function manualImport(input, articles) {
+function manualImport(input, articles, now) {
   if (!object(input) || !onlyKeys(input, ['platform', 'asOf', 'articles']) || !PLATFORMS.includes(input.platform) || !Array.isArray(input.articles) || !input.articles.length || input.articles.length > MAX_ARTICLES) throw new Failure(400, 'Supply a platform, asOf date, and 1–1,000 article statistics.');
-  const asOf = timestamp(input.asOf), known = new Set(articles.map(article => article.slug)), seen = new Set();
+  const asOf = timestamp(input.asOf, now), known = new Set(articles.map(article => article.slug)), seen = new Set();
   const entries = input.articles.map(row => {
     if (!object(row) || !onlyKeys(row, ['slug', 'url', 'views']) || !known.has(row.slug) || seen.has(row.slug) || !count(row.views)) throw new Failure(400, 'Use each known article slug once and a nonnegative whole-number view count.');
     seen.add(row.slug); return { slug: row.slug, views: row.views, asOf, url: sourceUrl(input.platform, row.url, row.slug) };
   });
   return { platform: input.platform, asOf, entries };
 }
-async function mergeImport(bucket, imported) {
+async function mergeImport(bucket, imported, now) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const { current, value } = await savedSnapshots(bucket);
+    const { current, value } = await savedSnapshots(bucket, now);
     for (const entry of imported.entries) {
       const prior = value.platforms[imported.platform][entry.slug];
       if (prior && prior.asOf > entry.asOf) throw new Failure(409, 'A newer snapshot is already saved for an article. Refresh the dashboard before importing older statistics.');
@@ -135,7 +135,7 @@ async function mergeImport(bucket, imported) {
     }
     uniqueUrls(value.platforms[imported.platform]);
     if (Object.keys(value.platforms[imported.platform]).length > MAX_ARTICLES) throw new Failure(413, 'The statistics archive has reached its article limit.');
-    value.updatedAt = new Date(Date.now()).toISOString();
+    value.updatedAt = new Date(now).toISOString();
     const text = JSON.stringify(value);
     if (new TextEncoder().encode(text).length > SNAPSHOT_LIMIT) throw new Failure(413, 'The statistics archive exceeds its size limit.');
     if (current && (typeof current.etag !== 'string' || !current.etag)) throw new Error('Missing storage revision');
@@ -147,11 +147,35 @@ async function mergeImport(bucket, imported) {
   throw new Failure(503, 'Statistics are being updated. Please retry shortly.');
 }
 function dayAt(now) { const parts = Object.fromEntries(dayFormatter.formatToParts(new Date(now)).map(({ type, value }) => [type, value])); return `${parts.year}-${parts.month}-${parts.day}`; }
+function validDay(value) { return typeof value === 'string' && DATE.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value; }
+// These are calendar labels, not Toronto instants: UTC day stepping also works across DST changes.
+function shiftDay(day, offset) { return new Date(Date.parse(`${day}T00:00:00Z`) + offset * DAY).toISOString().slice(0, 10); }
+function daysBetween(from, to) { return (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY + 1; }
+function dateSelection(parameters, now) {
+  const seen = new Set();
+  for (const [key] of parameters) {
+    if (!['range', 'from', 'to', 'article'].includes(key) || seen.has(key)) throw new Failure(400, 'Use each supported date-range parameter only once.');
+    seen.add(key);
+  }
+  const range = parameters.get('range') ?? '30d', today = dayAt(now), article = parameters.get('article');
+  if (!['7d', '30d', '90d', 'all', 'custom'].includes(range)) throw new Failure(400, 'Choose 7d, 30d, 90d, all, or custom for the date range.');
+  if (article !== null && !validSlug(article)) throw new Failure(400, 'Choose a known article slug.');
+  let from, to = today;
+  if (range === 'custom') {
+    from = parameters.get('from'); to = parameters.get('to');
+    if (!validDay(from) || !validDay(to) || from > to || to > today || daysBetween(from, to) > 3660) throw new Failure(400, 'Choose real, nonfuture from/to dates in order, covering no more than 3,660 inclusive Toronto days.');
+  } else {
+    if (parameters.has('from') || parameters.has('to')) throw new Failure(400, 'Use from and to only with the custom date range.');
+    from = range === 'all' ? null : shiftDay(today, 1 - Number.parseInt(range, 10));
+  }
+  return { range, from, to, today, article };
+}
 function add(left, right) { const value = left + right; if (!Number.isSafeInteger(value)) throw new Error('Statistics exceed numeric limit'); return value; }
-async function websiteStatistics(bucket, articles) {
+async function websiteStatistics(bucket, articles, selection) {
   const perArticle = Object.fromEntries(articles.map(article => [article.slug, 0]));
+  const periodPerArticle = Object.fromEntries(articles.map(article => [article.slug, 0])), periodDays = new Map();
   const pathToSlug = new Map(articles.map(article => [`/writing/${article.slug}`, article.slug]));
-  const today = dayAt(Date.now()), days = new Map(Array.from({ length: 30 }, (_, index) => [new Date(Date.parse(`${today}T00:00:00Z`) - (29 - index) * DAY).toISOString().slice(0, 10), 0]));
+  const { today } = selection, days = new Map(Array.from({ length: 30 }, (_, index) => [shiftDay(today, index - 29), 0]));
   const keys = [], seen = new Set(); let cursor, websiteSince = null, lastUpdated = null, unassignedWebsiteViews = 0;
   for (let page = 0; page < 10; page += 1) {
     const listing = await bucket.list({ prefix: 'analytics/', limit: 500, ...(cursor ? { cursor } : {}) });
@@ -160,7 +184,7 @@ async function websiteStatistics(bucket, articles) {
       const match = entry.key?.match(/^analytics\/(\d{4}-\d{2}-\d{2})\.json$/);
       if (!match) continue;
       const day = match[1];
-      if (!DATE.test(day) || new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) !== day || day > today || seen.has(entry.key)) throw new Error('Invalid analytics day');
+      if (!validDay(day) || day > today || seen.has(entry.key)) throw new Error('Invalid analytics day');
       seen.add(entry.key); keys.push({ key: entry.key, day });
       if (keys.length > 3660) throw new Failure(503, 'The recorded website history needs an archive rollup before it can be displayed completely.');
     }
@@ -183,18 +207,33 @@ async function websiteStatistics(bucket, articles) {
         const slug = pathToSlug.get(path); if (!slug) continue;
         perArticle[slug] = add(perArticle[slug], counters.pageview);
         if (days.has(day)) days.set(day, add(days.get(day), counters.pageview));
+        if ((selection.from === null || day >= selection.from) && day <= selection.to) {
+          periodPerArticle[slug] = add(periodPerArticle[slug], counters.pageview);
+          if (selection.article === null || selection.article === slug) periodDays.set(day, add(periodDays.get(day) || 0, counters.pageview));
+        }
       }
     }
   }
-  return { perArticle, daily: [...days].map(([day, views]) => ({ day, views })), websiteSince, lastUpdated, unassignedWebsiteViews };
+  const from = selection.from ?? websiteSince ?? today, length = daysBetween(from, selection.to);
+  if (length > 3660) throw new Failure(503, 'The recorded website history needs an archive rollup before its complete daily range can be displayed.');
+  const totalWebsiteViews = Object.values(periodPerArticle).reduce((sum, views) => add(sum, views), 0);
+  const period = {
+    range: selection.range, from, to: selection.to, today, timeZone, websiteSince,
+    includesUnrecordedDays: websiteSince === null || from < websiteSince, includesToday: selection.to === today,
+    totalWebsiteViews, selectedArticle: selection.article,
+    selectedArticleViews: selection.article === null ? totalWebsiteViews : periodPerArticle[selection.article],
+    daily: Array.from({ length }, (_, index) => { const day = shiftDay(from, index); return { day, views: websiteSince === null || day < websiteSince ? null : periodDays.get(day) || 0 }; }),
+  };
+  return { perArticle, periodPerArticle, period, daily: [...days].map(([day, views]) => ({ day, views })), websiteSince, lastUpdated, unassignedWebsiteViews };
 }
-async function dashboard(env, bucket, articles) {
-  const [external, website, reactions] = await Promise.all([savedSnapshots(bucket), websiteStatistics(bucket, articles), readReactionTotals(env, articles.map(article => article.slug))]);
+async function dashboard(env, bucket, articles, selection, now) {
+  if (selection.article !== null && !articles.some(article => article.slug === selection.article)) throw new Failure(400, 'Choose a known article slug.');
+  const [external, website, reactions] = await Promise.all([savedSnapshots(bucket, now), websiteStatistics(bucket, articles, selection), readReactionTotals(env, articles.map(article => article.slug))]);
   const rows = articles.map(article => {
     const sources = Object.fromEntries(PLATFORMS.map(platform => [platform, external.value.platforms[platform][article.slug] || null]));
     const likes = reactions[article.slug]; if (!count(likes)) throw new Error('Invalid reaction count');
     const websiteViews = website.perArticle[article.slug];
-    return { slug: article.slug, title: article.title, sourceUrl: article.sourceUrl, websiteViews, likes, ...sources, totalViews: PLATFORMS.reduce((total, platform) => add(total, sources[platform]?.views || 0), websiteViews) };
+    return { slug: article.slug, title: article.title, sourceUrl: article.sourceUrl, websiteViews, periodWebsiteViews: website.periodPerArticle[article.slug], likes, ...sources, totalViews: PLATFORMS.reduce((total, platform) => add(total, sources[platform]?.views || 0), websiteViews) };
   });
   const totals = { websiteViews: rows.reduce((sum, row) => add(sum, row.websiteViews), 0), likes: rows.reduce((sum, row) => add(sum, row.likes), 0) };
   const platforms = {};
@@ -204,13 +243,13 @@ async function dashboard(env, bucket, articles) {
     platforms[platform] = { reportedArticles: present.length, totalArticles: rows.length, earliestAsOf: dates[0] || null, latestAsOf: dates.at(-1) || null };
   }
   totals.reportedViews = rows.reduce((sum, row) => add(sum, row.totalViews), 0);
-  return { articles: rows, totals, daily: website.daily, coverage: {
+  return { articles: rows, totals, daily: website.daily, period: website.period, coverage: {
     websiteSince: website.websiteSince, lastUpdated: [external.value.updatedAt, website.lastUpdated].filter(Boolean).sort().at(-1) || null,
-    generatedAt: new Date(Date.now()).toISOString(), websiteWindow: 'recorded-lifetime', dailyWindow: 'last-30-days', externalWindow: 'latest-reported-cumulative',
+    generatedAt: new Date(now).toISOString(), websiteWindow: 'recorded-lifetime', dailyWindow: 'last-30-days', externalWindow: 'latest-reported-cumulative',
     timeZone, analyticsEnabled: env.ANALYTICS_ENABLED === 'true', unassignedWebsiteViews: website.unassignedWebsiteViews, platforms,
   } };
 }
-async function importDevto(input, env, articles) {
+async function importDevto(input, env, articles, now) {
   if (!object(input) || !onlyKeys(input, ['apiKey'])) throw new Failure(400, 'Supply only an optional DEV.to API key.');
   const key = input.apiKey === undefined ? env.DEVTO_ANALYTICS_API_KEY : input.apiKey;
   if (key === undefined || key === '') throw new Failure(409, 'Enter your DEV.to API key to refresh private view counts, or configure it securely on the server.', 'devto_key_required');
@@ -240,7 +279,7 @@ async function importDevto(input, env, articles) {
   if (!object(user) || typeof user.username !== 'string') throw new Failure(502, 'DEV.to returned an invalid account response.', 'devto_invalid_response');
   if (user.username !== 'dessygil') throw new Failure(400, 'Use the DEV.to API key belonging to dessygil.', 'devto_account_mismatch');
   const known = new Map(articles.map(article => [article.slug, article])), seen = new Set(), entries = [];
-  const asOf = new Date(Date.now()).toISOString();
+  const asOf = new Date(now).toISOString();
   for (let page = 1; page <= 11; page += 1) {
     const batch = await read(`/api/articles/me/published?per_page=100&page=${page}`);
     if (!Array.isArray(batch) || batch.length > 100) throw new Failure(502, 'DEV.to returned invalid article statistics.', 'devto_invalid_response');
@@ -268,12 +307,13 @@ export async function handleWritingDashboard(request, env) {
   try {
     const mode = await authorized(request, env), expectedMethod = path === '/api/private/writing-dashboard' ? 'GET' : 'POST';
     if (request.method !== expectedMethod) return json({ error: `Use ${expectedMethod}.` }, 405, { Allow: expectedMethod });
+    const now = Date.now(), selection = expectedMethod === 'GET' ? dateSelection(new URL(request.url).searchParams, now) : null;
     if (expectedMethod === 'POST') mutation(request, mode);
     const input = expectedMethod === 'POST' ? await boundedJson(request, path.endsWith('/devto-stats') ? 1024 : BODY_LIMIT) : null;
     const bucket = bucketFor(env), articles = await articlesFor(bucket);
-    if (expectedMethod === 'GET') return json(await dashboard(env, bucket, articles));
-    const imported = path.endsWith('/devto-stats') ? await importDevto(input, env, articles) : manualImport(input, articles);
-    return json(await mergeImport(bucket, imported));
+    if (expectedMethod === 'GET') return json(await dashboard(env, bucket, articles, selection, now));
+    const imported = path.endsWith('/devto-stats') ? await importDevto(input, env, articles, now) : manualImport(input, articles, now);
+    return json(await mergeImport(bucket, imported, now));
   } catch (error) {
     // Do not log or reflect request contents, upstream errors, credentials, or storage details.
     const status = error instanceof Failure ? error.status : 503;

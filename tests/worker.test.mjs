@@ -270,3 +270,44 @@ test('Topic routes resolve known archive tags and reject unknown topics', async 
   assert.ok(html.includes(topic.articles[0].title));
   assert.equal((await worker.fetch(new Request(`${origin}/writing/topics/topic-that-does-not-exist-xyz`), {})).status, 404);
 });
+
+test('recorded article visits flow into the private date-range report through the built Worker', async t => {
+  const siteOrigin = 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site';
+  const objects = new Map(); let revision = 0, clock = Date.parse('2026-11-14T02:00:00Z');
+  t.mock.method(Date, 'now', () => clock);
+  const BUCKET = {
+    async get(key) {
+      const saved = objects.get(key);
+      return saved ? { etag: saved.etag, size: saved.text.length, json: async () => JSON.parse(saved.text) } : null;
+    },
+    async put(key, text, options) {
+      const current = objects.get(key), condition = options?.onlyIf;
+      if (condition?.etagDoesNotMatch === '*' && current) return null;
+      if (condition?.etagMatches !== undefined && condition.etagMatches !== current?.etag) return null;
+      const etag = String(++revision); objects.set(key, { text, etag }); return { etag };
+    },
+    async list({ prefix }) { return { objects: [...objects.keys()].filter(key => key.startsWith(prefix)).map(key => ({ key })), truncated: false }; },
+  };
+  const env = { ...authenticatedEnv(BUCKET), ANALYTICS_ENABLED: 'true' };
+  async function visit(path) {
+    const result = await worker.fetch(new Request(`${siteOrigin}/api/analytics`, {
+      method: 'POST', headers: { Origin: siteOrigin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'pageview', path, referrer: null }),
+    }), env);
+    assert.equal(result.status, 202);
+  }
+  const [first, second] = snapshot;
+  await visit(`/writing/${first.slug}`); await visit(`/writing/${first.slug}`);
+  clock = Date.parse('2026-11-14T16:00:00Z');
+  await visit(`/writing/${second.slug}`); await visit('/');
+  const url = `${siteOrigin}/api/private/writing-dashboard?range=custom&from=2026-11-13&to=2026-11-13&article=${first.slug}`;
+  assert.equal((await worker.fetch(new Request(url), env)).status, 401);
+  const result = await worker.fetch(new Request(url, { headers: { Authorization: `Bearer ${fakeToken}` } }), env);
+  assert.equal(result.status, 200); assert.match(result.headers.get('Cache-Control'), /private, no-store/);
+  const report = await result.json();
+  assert.equal(report.period.totalWebsiteViews, 2);
+  assert.deepEqual(report.period.daily, [{ day: '2026-11-13', views: 2 }]);
+  assert.equal(report.articles.find(article => article.slug === second.slug).periodWebsiteViews, 0);
+  assert.equal(report.articles.find(article => article.slug === second.slug).websiteViews, 1);
+  assert.equal(report.totals.websiteViews, 3);
+});

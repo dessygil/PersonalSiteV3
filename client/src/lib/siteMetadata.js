@@ -3,7 +3,7 @@ import { findWritingTopic } from "./writingTopics";
 export const SITE_NAME = "Desmond Gilmour";
 export const SITE_DESCRIPTION = "Account Executive at Nicoya. Chemistry, computer science, and commercial strategy. Experience, projects, and writing by Desmond Gilmour.";
 export const WRITING_DESCRIPTION = "Articles by Desmond Gilmour on biophysical science, chemistry, and building software.";
-export const PERSONAL_SITE_ORIGIN = "https://desmondgilmour.com";
+export const PERSONAL_SITE_ORIGIN = "https://desmondgilmour.ca";
 
 export function articleCanonical(article, origin) {
   // Only the real site serving this route can declare its article the primary

@@ -8,6 +8,7 @@ import { publicSiteConfig } from './runtimeConfig.mjs';
 import { handleEngagement } from './engagement.mjs';
 import { handleArticleReactions } from './articleReactions.mjs';
 import { handleWritingDashboard } from './writingDashboard.mjs';
+import { PERSONAL_SITE_ORIGIN } from '../client/src/lib/siteMetadata.js';
 
 const key = 'writing/archive-v1.json';
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
@@ -25,6 +26,14 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/$/, '') || '/';
+    // Keep one public address while leaving API and platform sign-in requests
+    // on their original origin, where their authorization is checked.
+    const publicPage = ['/', '/writing', '/sitemap.xml', '/feed.xml', '/robots.txt', '/dashboard/writing'].includes(path) || path.startsWith('/writing/');
+    if (url.origin === 'https://www.desmondgilmour.ca' && publicPage && ['GET', 'HEAD'].includes(request.method)) {
+      const destination = new URL(PERSONAL_SITE_ORIGIN);
+      destination.pathname = url.pathname; destination.search = url.search;
+      return Response.redirect(destination.href, 308);
+    }
     const dashboard = await handleWritingDashboard(request, env);
     if (dashboard) return dashboard;
     const reactions = await handleArticleReactions(request, env);

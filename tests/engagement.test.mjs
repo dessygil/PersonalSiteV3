@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { handleEngagement } from '../server/engagement.mjs';
 import articles from '../client/src/data/article-index.json' with { type: 'json' };
 const origin = 'https://desmondgilmour.com', rateKey = 'contact/rate/limits.json';
+const approvedOrigins = ['https://desmondgilmour.ca', 'https://www.desmondgilmour.ca', origin, 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site'];
 const token = 'test-only-engagement-writer.not-a-real-secret';
 const verifier = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))), x => x.toString(16).padStart(2, '0')).join('');
 const now = Date.parse('2026-11-11T16:20:00.000Z');
@@ -230,15 +231,14 @@ test('owner analytics reads exactly 30 Toronto dates and returns only aggregate 
   assert.equal((await handleEngagement(privateRequest('/api/private/analytics'), env(bucket))).status, 503);
 });
 
-test('both exact public origins accept only their own same-origin analytics', async t => {
+test('all exact public origins accept only their own same-origin analytics', async t => {
   t.mock.method(Date, 'now', () => now);
-  const sitesOrigin = 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site';
-  for (const [site, other] of [[origin, sitesOrigin], [sitesOrigin, origin]]) {
+  for (const site of approvedOrigins) {
     const bucket = new Bucket();
     assert.equal((await handleEngagement(event({}, { site }), env(bucket))).status, 202);
     assert.equal(bucket.value('analytics/2026-11-11.json').events.pageview, 1);
     const noWrites = new Bucket();
-    for (const header of [other, null, `${site}/`, `${site}.evil.test`]) {
+    for (const header of [...approvedOrigins.filter(other => other !== site), null, `${site}/`, `${site}.evil.test`]) {
       assert.equal((await handleEngagement(event({}, { site, headers: { Origin: header } }), env(noWrites))).status, 403);
     }
     assert.equal((await handleEngagement(event({}, { site }), env(noWrites, { ANALYTICS_ENABLED: 'false' }))).status, 204);
@@ -246,18 +246,18 @@ test('both exact public origins accept only their own same-origin analytics', as
   }
 });
 
-test('HTTP, lookalikes and other Sites cannot contribute analytics', async () => {
+test('HTTP, nondefault ports, lookalikes and other Sites cannot contribute analytics', async () => {
   const sitesOrigin = 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site';
   const bucket = new Bucket();
-  for (const site of ['http://desmondgilmour.com', sitesOrigin.replace('https:', 'http:'), `${sitesOrigin}.evil.test`, 'https://another-site.playfulporpoise2.chatgpt.site', 'https://des-personal-site-preview.other-workspace.chatgpt.site', 'https://desmondgilmour.com.evil.test']) {
+  for (const site of ['http://desmondgilmour.ca', 'http://www.desmondgilmour.ca', 'https://desmondgilmour.ca:8443', 'https://www.desmondgilmour.ca:8443', 'https://desmondgilmour.ca.evil.test', 'https://www.desmondgilmour.ca.evil.test', 'http://desmondgilmour.com', 'https://www.desmondgilmour.com', sitesOrigin.replace('https:', 'http:'), `${sitesOrigin}.evil.test`, 'https://another-site.playfulporpoise2.chatgpt.site', 'https://des-personal-site-preview.other-workspace.chatgpt.site', 'https://desmondgilmour.com.evil.test']) {
     assert.equal((await handleEngagement(event({}, { site, headers: { Origin: origin } }), env(bucket))).status, 204);
   }
   assert.deepEqual(bucket.calls, []);
 });
 
-test('privacy opt-out headers suppress analytics on both approved origins', async () => {
+test('privacy opt-out headers suppress analytics on all approved origins', async () => {
   const bucket = new Bucket();
-  for (const site of [origin, 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site']) {
+  for (const site of approvedOrigins) {
     for (const headers of [{ DNT: '1' }, { DNT: 'yes' }, { 'Sec-GPC': '1' }]) {
       assert.equal((await handleEngagement(event({}, { site, headers }), env(bucket))).status, 204);
     }
@@ -265,13 +265,15 @@ test('privacy opt-out headers suppress analytics on both approved origins', asyn
   assert.deepEqual(bucket.calls, []);
 });
 
-test('referrals between the approved public hosts are internal aggregates', async t => {
+test('approved public hosts retain one aggregate store and treat referrals between them as internal', async t => {
   t.mock.method(Date, 'now', () => now);
   const bucket = new Bucket();
-  for (const referrer of ['desmondgilmour.com', 'des-personal-site-preview.playfulporpoise2.chatgpt.site']) {
-    assert.equal((await handleEngagement(event({ referrer }), env(bucket))).status, 202);
+  const hosts = ['desmondgilmour.ca', 'www.desmondgilmour.ca', 'desmondgilmour.com', 'www.desmondgilmour.com', 'des-personal-site-preview.playfulporpoise2.chatgpt.site'];
+  for (const [index, referrer] of hosts.entries()) {
+    assert.equal((await handleEngagement(event({ referrer }, { site: approvedOrigins[index % approvedOrigins.length] }), env(bucket))).status, 202);
   }
-  assert.deepEqual(bucket.value('analytics/2026-11-11.json').referrers, { '(internal)': 2 });
+  assert.deepEqual(bucket.value('analytics/2026-11-11.json').referrers, { '(internal)': 5 });
+  assert.equal(bucket.value('analytics/2026-11-11.json').events.pageview, 5);
 });
 
 test('public Sites access does not authorize private inbox, analytics or deletion', async () => {

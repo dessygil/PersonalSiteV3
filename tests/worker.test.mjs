@@ -271,6 +271,24 @@ test('Topic routes resolve known archive tags and reject unknown topics', async 
   assert.equal((await worker.fetch(new Request(`${origin}/writing/topics/topic-that-does-not-exist-xyz`), {})).status, 404);
 });
 
+test('www.ca public pages redirect to the primary domain without redirecting private API requests', async () => {
+  for (const method of ['GET', 'HEAD']) {
+    for (const path of ['/', '/writing', `/writing/${snapshot[0].slug}?from=profile%20link`, '/feed.xml', '/sitemap.xml', '/robots.txt', '/dashboard/writing']) {
+      const result = await worker.fetch(new Request(`https://www.desmondgilmour.ca${path}`, { method }), {});
+      assert.equal(result.status, 308);
+      assert.equal(result.headers.get('Location'), `https://desmondgilmour.ca${path}`);
+    }
+  }
+  const api = await worker.fetch(new Request('https://www.desmondgilmour.ca/api/private/writing-dashboard'), {});
+  assert.equal(api.status, 401); assert.equal(api.headers.get('Location'), null);
+  const post = await worker.fetch(new Request('https://www.desmondgilmour.ca/writing', { method: 'POST' }), {});
+  assert.equal(post.status, 405); assert.equal(post.headers.get('Location'), null);
+  for (const hostname of ['desmondgilmour.ca', 'www.desmondgilmour.ca.example.test', 'www.desmondgilmour.com']) {
+    const result = await worker.fetch(new Request(`https://${hostname}/writing`), {});
+    assert.equal(result.status, 200); assert.equal(result.headers.get('Location'), null);
+  }
+});
+
 test('recorded article visits flow into the private date-range report through the built Worker', async t => {
   const siteOrigin = 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site';
   const objects = new Map(); let revision = 0, clock = Date.parse('2026-11-14T02:00:00Z');

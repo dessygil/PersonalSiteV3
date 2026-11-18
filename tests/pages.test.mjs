@@ -267,16 +267,16 @@ test('missing routes have a server-rendered 404 and noindex metadata', () => {
 test('personal article canonicals activate only on the actual public HTTPS origin', () => {
   const post = article();
   const path = `/writing/${post.slug}`;
-  const publicMeta = metadata([post], path, 'https://desmondgilmour.com');
-  assert.equal(publicMeta.canonical, `https://desmondgilmour.com${path}`);
+  const publicMeta = metadata([post], path, 'https://desmondgilmour.ca');
+  assert.equal(publicMeta.canonical, `https://desmondgilmour.ca${path}`);
   assert.equal(publicMeta.schema.mainEntityOfPage, publicMeta.canonical);
-  for (const previewOrigin of [origin, 'http://desmondgilmour.com', 'https://www.desmondgilmour.com', 'https://desmondgilmour.com.example.net', 'https://desmondgilmour.com:8443']) {
+  for (const previewOrigin of [origin, 'https://desmondgilmour.com', 'http://desmondgilmour.ca', 'https://www.desmondgilmour.ca', 'https://desmondgilmour.ca.example.net', 'https://desmondgilmour.ca:8443']) {
     const meta = metadata([post], path, previewOrigin);
     assert.equal(meta.canonical, post.sourceUrl);
     assert.equal(meta.schema.mainEntityOfPage, post.sourceUrl);
-    assert.ok(!meta.tags.includes(`rel="canonical" href="https://desmondgilmour.com${path}"`));
+    assert.ok(!meta.tags.includes(`rel="canonical" href="https://desmondgilmour.ca${path}"`));
   }
-  const importedWithFutureCanonical = { ...post, canonicalUrl: `https://desmondgilmour.com${path}` };
+  const importedWithFutureCanonical = { ...post, canonicalUrl: `https://desmondgilmour.ca${path}` };
   assert.equal(metadata([importedWithFutureCanonical], path, origin).canonical, post.sourceUrl);
 });
 

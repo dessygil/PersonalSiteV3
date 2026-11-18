@@ -12,14 +12,14 @@ test('public config includes only validated widget and feature settings, never s
  assert.equal(value.contact.endpoint, '/api/contact'); assert.equal(value.analytics.enabled, true);
  assert.ok(!JSON.stringify(value).includes('never-expose-this'));
 });
-test('analytics enables only the two approved HTTPS origins with the explicit flag', () => {
- for (const origin of ['https://desmondgilmour.com', 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site']) {
+test('analytics enables only the four approved HTTPS origins with the explicit flag', () => {
+ for (const origin of ['https://desmondgilmour.ca', 'https://www.desmondgilmour.ca', 'https://desmondgilmour.com', 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site']) {
   assert.equal(publicSiteConfig({ ANALYTICS_ENABLED: 'true' }, origin).analytics.enabled, true);
   for (const flag of [undefined, 'false', true, 'TRUE']) assert.equal(publicSiteConfig({ ANALYTICS_ENABLED: flag }, origin).analytics.enabled, false);
  }
 });
 test('analytics stays off on other Sites, local, lookalike and non-HTTPS origins', () => {
- for (const origin of ['https://another-site.playfulporpoise2.chatgpt.site', 'https://des-personal-site-preview.other-workspace.chatgpt.site', 'http://localhost:3000', 'http://desmondgilmour.com', 'http://des-personal-site-preview.playfulporpoise2.chatgpt.site', 'https://desmondgilmour.com.evil.test', 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site.evil.test', 'https://www.desmondgilmour.com']) assert.equal(publicSiteConfig({ ANALYTICS_ENABLED: 'true' }, origin).analytics.enabled, false);
+ for (const origin of ['https://another-site.playfulporpoise2.chatgpt.site', 'https://des-personal-site-preview.other-workspace.chatgpt.site', 'http://localhost:3000', 'http://desmondgilmour.ca', 'http://www.desmondgilmour.ca', 'https://desmondgilmour.ca.evil.test', 'https://www.desmondgilmour.ca.evil.test', 'https://desmondgilmour.ca:8443', 'https://www.desmondgilmour.ca:8443', 'http://desmondgilmour.com', 'http://des-personal-site-preview.playfulporpoise2.chatgpt.site', 'https://desmondgilmour.com.evil.test', 'https://des-personal-site-preview.playfulporpoise2.chatgpt.site.evil.test', 'https://www.desmondgilmour.com']) assert.equal(publicSiteConfig({ ANALYTICS_ENABLED: 'true' }, origin).analytics.enabled, false);
 });
 test('unsafe service settings cannot create arbitrary embeds or form destinations', () => {
  for (const widgetUrl of ['javascript:alert(1)', 'https://www.strava.com.evil.test/athletes/123/latest-rides/x', 'https://www.strava.com/athletes/123/latest-rides/x?redirect=evil', 'https://user:password@www.strava.com/athletes/123/latest-rides/x']) assert.equal(normalizeSiteConfig({ strava: { widgetUrl } }).strava.widgetUrl, null);

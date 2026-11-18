@@ -34,7 +34,7 @@ The Worker serves the full homepage, topic collections, and article HTML before
 JavaScript runs, with profile/article metadata, a sitemap, and an RSS feed.
 The homepage downloads article summaries; full text loads only when needed.
 Responsive WebP portraits avoid downloading the original multi-megabyte photo.
-See `SEARCH.md` for the canonical policy and the later custom-domain connection.
+See `SEARCH.md` for the canonical policy and custom-domain connection.
 
 ## Content
 
@@ -75,9 +75,9 @@ unattended update operation and verification steps.
 
 ## Hosting and source
 
-Source repository: [dessygil/PersonalSiteV3](https://github.com/dessygil/PersonalSiteV3).
-
-This version is publicly hosted at
+The primary public address is https://desmondgilmour.ca, registered at Name.com.
+Public pages on www.desmondgilmour.ca redirect to the matching apex .ca address.
+The Sites platform address remains available at
 https://des-personal-site-preview.playfulporpoise2.chatgpt.site while the owner
 arranges the transfer of desmondgilmour.com into their Name.com account.
 The original dessygil/des-personal-site GitHub repository and Netlify site are
@@ -96,7 +96,7 @@ contact inbox, runtime writing imports, or server-rendered article pages.
 ## Training, contact, analytics, and checks
 
 The homepage includes a half-Ironman training section and the owner's official
-Strava widgets, which load on request. The site also includes a first-party
+Strava widget, which loads on request. The site also includes a first-party
 contact form, basic aggregate analytics, and authenticated health/link checks.
 These use existing hosting and task resources, without new service accounts.
 See `INTEGRATIONS.md` for runtime settings and data handling, and `MONITORING.md`

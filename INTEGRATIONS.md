@@ -29,14 +29,16 @@ The owner selected saved messages with a daily ChatGPT summary; inbox mode is en
 ANALYTICS_ENABLED=true enables basic aggregate pageviews and contact/project/link
 click counts on these exact approved HTTPS origins:
 
+- https://desmondgilmour.ca — the primary personal website.
+- https://www.desmondgilmour.ca — the supported www address.
 - https://des-personal-site-preview.playfulporpoise2.chatgpt.site — the public Sites URL.
 - https://desmondgilmour.com — supported when this application is served there.
 
 The shared allowlist in client/src/lib/analyticsOrigins.js is used by the public
 configuration, browser tracker, and server handler. Events must originate from
-the same origin that receives them; the two approved origins do not grant each
+the same origin that receives them; the approved origins do not grant each
 other cross-origin access. Other Sites URLs, lookalike domains, HTTP, and local
-development do not contribute counts. Both approved origins use the same
+development or nondefault ports do not contribute counts. All approved origins use the same
 first-party aggregate store, and links between them are treated as internal.
 No external tracker is loaded. No visitor identifiers, cookies, raw IP addresses, browser
 fingerprints, full referrer URLs, or form contents are stored in the analytics.

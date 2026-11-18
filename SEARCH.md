@@ -7,24 +7,29 @@ The sitemap is at `/sitemap.xml`; the RSS feed is at `/feed.xml`.
 
 These features make public pages easier to discover and interpret. They do not
 guarantee inclusion or ranking in search engines or AI answers. The initial
-public launch uses the Sites platform address. The custom domain
-will be connected separately after its domain-management transfer.
+public launch used the Sites platform address. The owner has now connected
+desmondgilmour.ca through Name.com while the .com transfer is pending.
 
 ## Canonical policy
 
 On the temporary Sites address, article canonical links continue to identify
 their original DEV.to URLs, avoiding a temporary ownership migration. When this
 same application serves an article from
-`https://desmondgilmour.com`, that article identifies its own personal-site URL
+`https://desmondgilmour.ca`, that article identifies its own personal-site URL
 as canonical instead. The source attribution still links to DEV.to.
 
 The mapping for every existing and future imported article is:
 
     https://dev.to/dessygil/{slug}
-    → https://desmondgilmour.com/writing/{slug}
+    → https://desmondgilmour.ca/writing/{slug}
+
+Public page requests to `www.desmondgilmour.ca` redirect permanently to the
+matching apex .ca URL, preserving paths and query strings. API and sign-in
+requests retain their original origin and authorization checks. The .com
+domain can be made primary later after it is connected and verified.
 
 Public launch on the Sites address was approved on November 13, 2026. The
-personal domain and DEV.to post settings remain unchanged. Once the personal
+DEV.to post settings remain unchanged. Once the personal
 domain is connected and its article URLs return complete pages successfully,
 the owner can authorize updating each DEV.to post's
 canonical URL to its corresponding personal-site URL. That step requires the

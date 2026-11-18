@@ -1,5 +1,5 @@
 import {
-  ANALYTICS_ENDPOINT, ANALYTICS_EVENTS, analyticsPath, analyticsReferrer,
+  ANALYTICS_ORIGIN, ANALYTICS_ENDPOINT, ANALYTICS_EVENTS, analyticsPath, analyticsReferrer,
   createAnalyticsController, isAnalyticsEnabled, mountAnalytics, trackAnalyticsEvent,
 } from "./siteAnalytics";
 
@@ -7,12 +7,13 @@ jest.mock("./writingData", () => [{ slug: "test-post", tags: ["science"] }]);
 
 const config = { analytics: { enabled: true, endpoint: ANALYTICS_ENDPOINT } };
 const platformOrigin = "https://des-personal-site-preview.playfulporpoise2.chatgpt.site";
+const approvedOrigins = ["https://desmondgilmour.ca", "https://www.desmondgilmour.ca", "https://desmondgilmour.com", platformOrigin];
 function browser(overrides = {}) {
   const document = window.document.implementation.createHTMLDocument("Analytics test");
   Object.defineProperty(document, "referrer", { value: "https://search.example/results?q=person@example.com#private" });
   return {
     document, navigator: {},
-    location: { origin: "https://desmondgilmour.com", pathname: "/" },
+    location: { origin: "https://desmondgilmour.ca", pathname: "/" },
     fetch: jest.fn(() => Promise.resolve({ ok: true })),
     ...overrides,
   };
@@ -40,15 +41,16 @@ function click(environment, href, properties = {}) {
 }
 
 test("analytics requires explicit same-origin enablement and respects privacy signals", () => {
+  expect(ANALYTICS_ORIGIN).toBe("https://desmondgilmour.ca");
   const environment = browser();
   expect(isAnalyticsEnabled(config, environment)).toBe(true);
   for (const analytics of [undefined, { enabled: false, endpoint: ANALYTICS_ENDPOINT }, { enabled: "true", endpoint: ANALYTICS_ENDPOINT }, { enabled: true, endpoint: "https://other.example/api/analytics" }, { enabled: true, endpoint: "/api/analytics?email=private" }]) {
     expect(isAnalyticsEnabled({ analytics }, environment)).toBe(false);
   }
-  for (const origin of ["http://localhost:3000", "https://preview.example", "http://desmondgilmour.com", "https://www.desmondgilmour.com", "https://desmondgilmour.com.example", platformOrigin.replace("https:", "http:"), `${platformOrigin}.example`, "https://another-site.playfulporpoise2.chatgpt.site"]) {
+  for (const origin of ["http://localhost:3000", "https://preview.example", "http://desmondgilmour.ca", "http://www.desmondgilmour.ca", "https://desmondgilmour.ca.example", "https://www.desmondgilmour.ca.example", "https://desmondgilmour.ca:8443", "https://www.desmondgilmour.ca:8443", "http://desmondgilmour.com", "https://www.desmondgilmour.com", "https://desmondgilmour.com.example", platformOrigin.replace("https:", "http:"), `${platformOrigin}.example`, "https://another-site.playfulporpoise2.chatgpt.site"]) {
     expect(isAnalyticsEnabled(config, browser({ location: { origin } }))).toBe(false);
   }
-  for (const origin of ["https://desmondgilmour.com", platformOrigin]) {
+  for (const origin of approvedOrigins) {
     expect(isAnalyticsEnabled(config, browser({ location: { origin } }))).toBe(true);
     for (const navigator of [{ globalPrivacyControl: true }, { doNotTrack: "1" }, { doNotTrack: "yes" }, { msDoNotTrack: "1" }]) {
       expect(isAnalyticsEnabled(config, browser({ navigator, location: { origin } }))).toBe(false);
@@ -64,13 +66,13 @@ test("only published paths and external referrer hostnames survive normalization
   expect(analyticsPath("/person@example.com/private")).toBe("/404");
   expect(analyticsPath("/api/contact")).toBe("/404");
   expect(analyticsReferrer("https://search.example/results?q=person@example.com#private")).toBe("search.example");
-  for (const value of [null, "", "invalid", "https://desmondgilmour.com/writing", "https://www.desmondgilmour.com/", `${platformOrigin}/writing?private=1`, "https://user:password@example.com/", "http://127.0.0.1/private", "http://[::1]/", "data:text/plain,private"]) {
+  for (const value of [null, "", "invalid", "https://desmondgilmour.ca/writing?private=1", "https://www.desmondgilmour.ca/writing#private", "https://desmondgilmour.com/writing", "https://www.desmondgilmour.com/", `${platformOrigin}/writing?private=1`, "https://user:password@example.com/", "http://127.0.0.1/private", "http://[::1]/", "data:text/plain,private"]) {
     expect(analyticsReferrer(value)).toBeNull();
   }
 });
 
-test("public Sites origin uses cookie-free relative analytics and honors later privacy changes", () => {
-  const environment = browser({ location: { origin: platformOrigin, pathname: "/" } });
+test.each(approvedOrigins)("approved origin %s uses cookie-free relative analytics and honors later privacy changes", origin => {
+  const environment = browser({ location: { origin, pathname: "/" } });
   const session = mountAnalytics(config, environment);
   session.page("/");
   expect(payloads(environment)).toEqual([{ event: "pageview", path: "/", referrer: "search.example" }]);

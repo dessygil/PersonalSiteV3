@@ -1,8 +1,10 @@
 // Exact origins approved for first-party aggregate analytics. This list does
 // not control canonical URLs, site visibility, or owner authentication.
-export const ANALYTICS_ORIGIN = "https://desmondgilmour.com";
+export const ANALYTICS_ORIGIN = "https://desmondgilmour.ca";
 export const ANALYTICS_ORIGINS = Object.freeze([
   ANALYTICS_ORIGIN,
+  "https://www.desmondgilmour.ca",
+  "https://desmondgilmour.com",
   "https://des-personal-site-preview.playfulporpoise2.chatgpt.site",
 ]);
 const internalHosts = new Set([
